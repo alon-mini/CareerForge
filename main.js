@@ -6,6 +6,10 @@ function createWindow() {
   const win = new BrowserWindow({
     width: 1280,
     height: 800,
+    minWidth: 1024,
+    minHeight: 700,
+    show: false, // Hide initially to prevent white flash
+    backgroundColor: '#0f172a', // Dark slate match for dark mode
     webPreferences: {
       nodeIntegration: true,
       contextIsolation: false,
@@ -14,6 +18,11 @@ function createWindow() {
 
   win.loadFile(path.join(__dirname, 'dist', 'index.html'));
   win.setMenuBarVisibility(false);
+
+  // Only show window when content is ready
+  win.once('ready-to-show', () => {
+    win.show();
+  });
 }
 
 app.whenReady().then(() => {

@@ -8,7 +8,7 @@ const path = (window as any).require ? (window as any).require('path') : null;
 const DATA_DIR_NAME = 'user_data';
 const KITS_DIR_NAME = 'Kits';
 const PROFILE_FILE_NAME = 'profile.md';
-const HISTORY_FILE_NAME = 'applications.csv';
+const HISTORY_FILE_NAME = 'applications.json'; // Changed to JSON
 
 export const fileSystemService = {
   /**
@@ -57,9 +57,9 @@ export const fileSystemService = {
   },
 
   /**
-   * Appends an application record to the CSV file.
-   * We use Base64 encoding for the heavy content fields to avoid CSV parsing issues with newlines/commas.
-   * Saves to user_data/Kits/applications.csv
+   * Appends an application record to the JSON file.
+   * Reads the existing array, pushes new record, writes back.
+   * Saves to user_data/Kits/applications.json
    */
   saveApplicationToHistory: (record: ApplicationRecord) => {
     if (!fs || !path) return;
@@ -73,30 +73,35 @@ export const fileSystemService = {
       }
 
       const filePath = path.join(kitsDir, HISTORY_FILE_NAME);
-
-      // CSV Columns: ID, Date, Title, Company, B64_Assets
-      // We serialize the entire assets object to JSON then Base64 it for the single column
-      const assetsB64 = btoa(JSON.stringify(record.assets));
       
-      // Escape logic for standard fields (just in case they have commas)
-      const escape = (txt: string) => `"${txt.replace(/"/g, '""')}"`;
-      
-      const row = `${escape(record.id)},${escape(record.date)},${escape(record.title)},${escape(record.company)},${assetsB64}\n`;
+      let history: ApplicationRecord[] = [];
 
-      // Add header if file doesn't exist
-      if (!fs.existsSync(filePath)) {
-        const header = `ID,Date,Title,Company,AssetsPayload\n`;
-        fs.writeFileSync(filePath, header + row, 'utf-8');
-      } else {
-        fs.appendFileSync(filePath, row, 'utf-8');
+      // Load existing if available
+      if (fs.existsSync(filePath)) {
+        try {
+          const fileContent = fs.readFileSync(filePath, 'utf-8');
+          history = JSON.parse(fileContent);
+          if (!Array.isArray(history)) history = [];
+        } catch (e) {
+          console.warn("Could not parse existing history, starting fresh.");
+          history = [];
+        }
       }
+
+      // Add new record
+      history.push(record);
+
+      // Write back
+      fs.writeFileSync(filePath, JSON.stringify(history, null, 2), 'utf-8');
+      console.log(`Application history saved to ${filePath}`);
+      
     } catch (error) {
       console.error("Failed to save application history:", error);
     }
   },
 
   /**
-   * Loads and parses the CSV history from user_data/Kits/applications.csv
+   * Loads and parses the JSON history from user_data/Kits/applications.json
    */
   loadApplicationHistory: (): ApplicationRecord[] => {
     if (!fs || !path) return [];
@@ -108,38 +113,12 @@ export const fileSystemService = {
       if (!fs.existsSync(filePath)) return [];
 
       const fileContent = fs.readFileSync(filePath, 'utf-8');
-      const lines = fileContent.split('\n').filter(line => line.trim() !== '');
-      
-      // Skip header
-      if (lines.length <= 1) return [];
-      
-      const records: ApplicationRecord[] = [];
+      const history = JSON.parse(fileContent);
 
-      // Simple CSV parser (assumes our specific format)
-      for (let i = 1; i < lines.length; i++) {
-        const line = lines[i];
-        
-        const parts = line.match(/(".*?"|[^",\s]+)(?=\s*,|\s*$)/g);
-        
-        if (parts && parts.length >= 5) {
-           const id = parts[0].replace(/^"|"$/g, '').replace(/""/g, '"');
-           const date = parts[1].replace(/^"|"$/g, '').replace(/""/g, '"');
-           const title = parts[2].replace(/^"|"$/g, '').replace(/""/g, '"');
-           const company = parts[3].replace(/^"|"$/g, '').replace(/""/g, '"');
-           const assetsB64 = parts[4]; 
-
-           try {
-             const assetsJson = atob(assetsB64);
-             const assets = JSON.parse(assetsJson) as GeneratedAssets;
-             records.push({ id, date, title, company, assets });
-           } catch (e) {
-             console.warn("Failed to parse row assets", e);
-           }
-        }
-      }
+      if (!Array.isArray(history)) return [];
 
       // Return newest first
-      return records.reverse();
+      return history.reverse();
     } catch (error) {
       console.error("Failed to load history:", error);
       return [];

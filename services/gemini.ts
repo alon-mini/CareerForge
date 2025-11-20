@@ -13,11 +13,11 @@ const responseSchema: Schema = {
     },
     coverLetter: {
       type: Type.STRING,
-      description: "The text content of a professional cover letter tailored to the job."
+      description: "The text content of a professional cover letter tailored to the job. Plain text only, no markdown."
     },
     strategyStory: {
       type: Type.STRING,
-      description: "A strategic narrative for the candidate. This should explain how to frame their past experience to fit this new role, key talking points for interviews, and a 'hero's journey' pitch."
+      description: "A strategic narrative for the candidate. Plain text only, no markdown."
     },
     interviewPrep: {
       type: Type.ARRAY,
@@ -100,6 +100,9 @@ export const generateApplicationAssets = async (
     - **Tone**: Conversational, authentic, direct, and human. 
     - **AVOID AI CLICHÉS**: Do NOT use words like "thrilled," "delighted," "tapestry," "uniquely positioned," "seamless," "realm," or "beacon."
     - **Style**: Write as if a senior professional is emailing a peer. Be confident but grounded.
+    - **FORMATTING STRICTLY PLAIN TEXT**: 
+        - Do NOT use Markdown formatting (NO bold \`**text**\`, NO italics \`_text_\`).
+        - Do NOT use em-dashes (—). Use a simple hyphen (-) or a comma instead.
     - **Structure**:
       - Hook: Don't start with "I am writing to apply." Start with a strong statement about the field or the company's recent work.
       - Middle: Connect specific past wins (using numbers) to the future problems this role needs to solve.
@@ -109,6 +112,10 @@ export const generateApplicationAssets = async (
     - A guide for the candidate on how to present themselves. 
     - Explain the "bridge" between their past and this new role. 
     - Provide 3 key "Power Stories" to tell in the interview (STAR method).
+    - **FORMATTING STRICTLY PLAIN TEXT**: 
+        - Do NOT use Markdown formatting (NO bold \`**\`, NO headers \`#\`).
+        - Do NOT use em-dashes (—). Use standard punctuation.
+        - Use simple line breaks for paragraphs.
 
     ### 4. Interview Prep (5 Questions)
     - Generate 5 tough questions that this specific hiring manager might ask this specific candidate.
@@ -139,7 +146,7 @@ export const generateApplicationAssets = async (
       config: {
         responseMimeType: "application/json",
         responseSchema: responseSchema,
-        systemInstruction: "You are a world-class career strategist. You prioritize concise, high-impact communication. You NEVER produce a resume longer than 1 page. You write cover letters that sound like real humans, not robots.",
+        systemInstruction: "You are a world-class career strategist. You prioritize concise, high-impact communication. You NEVER produce a resume longer than 1 page. You write cover letters that sound like real humans, not robots. You never use Markdown syntax in plain text fields.",
       },
     });
 

@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect } from 'react';
 import { AppState, AppStatus, UserProfile, JobDetails, ApplicationRecord } from './types';
 import { generateApplicationAssets } from './services/gemini';
@@ -170,7 +171,7 @@ function App() {
   };
 
   if (!apiKey) {
-    return <LoginScreen onLogin={handleLogin} logoSrc="logoc.png" />;
+    return <LoginScreen onLogin={handleLogin} />;
   }
 
   return (
@@ -181,7 +182,11 @@ function App() {
       <nav className="sticky top-0 z-30 bg-white/80 dark:bg-slate-900/80 backdrop-blur-md border-b border-slate-200 dark:border-slate-800 px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between transition-colors duration-300">
         <div className="flex items-center gap-8">
           <div className="flex items-center gap-3">
-            <img src="logoc.png" alt="Logo" className="h-8 w-auto" />
+            <div className="w-8 h-8 bg-slate-900 dark:bg-white rounded-lg flex items-center justify-center shadow-sm">
+              <svg className="w-5 h-5 text-white dark:text-slate-900" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19.428 15.428a2 2 0 00-1.022-.547l-2.387-.477a6 6 0 00-3.86.517l-.318.158a6 6 0 01-3.86.517L6.05 15.21a2 2 0 00-1.806.547M8 4h8l-1 1v5.172a2 2 0 00.586 1.414l5 5c1.26 1.26.367 3.414-1.415 3.414H4.828c-1.782 0-2.674-2.154-1.414-3.414l5-5A2 2 0 009 10.172V5L8 4z" />
+              </svg>
+            </div>
             <span className="font-bold text-lg tracking-tight text-slate-900 dark:text-white">CareerForge</span>
           </div>
 

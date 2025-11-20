@@ -1,5 +1,6 @@
-const { app, BrowserWindow } = require('electron');
+const { app, BrowserWindow, ipcMain, dialog } = require('electron');
 const path = require('path');
+const fs = require('fs');
 
 function createWindow() {
   const win = new BrowserWindow({
@@ -7,16 +8,11 @@ function createWindow() {
     height: 800,
     webPreferences: {
       nodeIntegration: true,
-      contextIsolation: false, // Allowed for local desktop apps without complex preload
+      contextIsolation: false,
     },
-    icon: path.join(__dirname, 'icon.png') // Optional: assumes icon exists, otherwise defaults
   });
 
-  // In production, this would load the built index.html.
-  // For this setup, we load the local index.html
-  win.loadFile('index.html');
-  
-  // Remove menu for a cleaner look
+  win.loadFile(path.join(__dirname, 'dist', 'index.html'));
   win.setMenuBarVisibility(false);
 }
 
@@ -33,5 +29,49 @@ app.whenReady().then(() => {
 app.on('window-all-closed', () => {
   if (process.platform !== 'darwin') {
     app.quit();
+  }
+});
+
+// IPC Handler for PDF Generation with Text Layer
+ipcMain.handle('export-pdf', async (event, htmlContent, defaultFilename) => {
+  let pdfWindow = new BrowserWindow({ 
+    show: false, 
+    webPreferences: { nodeIntegration: true } 
+  });
+
+  try {
+    // Load the HTML content directly into the hidden window
+    // encoding logic handles special characters
+    await pdfWindow.loadURL(`data:text/html;charset=utf-8,${encodeURIComponent(htmlContent)}`);
+
+    // Wait a brief moment for any fonts/styles to settle
+    await new Promise(resolve => setTimeout(resolve, 500));
+
+    const pdfData = await pdfWindow.webContents.printToPDF({
+      printBackground: true,
+      pageSize: 'A4',
+      margins: { top: 0, bottom: 0, left: 0, right: 0 } // CSS handles the margins
+    });
+
+    // Open the Save Dialog
+    const { filePath } = await dialog.showSaveDialog({
+      defaultPath: defaultFilename,
+      filters: [{ name: 'PDF', extensions: ['pdf'] }]
+    });
+
+    if (filePath) {
+      fs.writeFileSync(filePath, pdfData);
+      return true;
+    }
+    return false;
+
+  } catch (error) {
+    console.error("PDF Generation Failed:", error);
+    throw error;
+  } finally {
+    if (pdfWindow) {
+      pdfWindow.close();
+      pdfWindow = null;
+    }
   }
 });

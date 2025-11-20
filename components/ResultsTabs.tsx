@@ -1,15 +1,14 @@
-
-import React, { useState, useRef } from 'react';
-import { GeneratedAssets } from '../types';
+import React, { useState } from 'react';
+import { GeneratedAssets, JobDetails } from '../types';
 
 interface ResultsTabsProps {
   results: GeneratedAssets;
+  jobDetails: { title: string; company: string };
 }
 
-const ResultsTabs: React.FC<ResultsTabsProps> = ({ results }) => {
+const ResultsTabs: React.FC<ResultsTabsProps> = ({ results, jobDetails }) => {
   const [activeTab, setActiveTab] = useState<'resume' | 'coverLetter' | 'story' | 'interview' | 'outreach'>('resume');
   const [copyFeedback, setCopyFeedback] = useState<string | null>(null);
-  const iframeRef = useRef<HTMLIFrameElement>(null);
 
   const handleCopy = (text: string) => {
     navigator.clipboard.writeText(text);
@@ -17,16 +16,27 @@ const ResultsTabs: React.FC<ResultsTabsProps> = ({ results }) => {
     setTimeout(() => setCopyFeedback(null), 2000);
   };
 
-  const handleDownloadPdf = () => {
-    if (!iframeRef.current) return;
-    const doc = iframeRef.current.contentDocument;
-    if (!doc) return;
+  const handleDownloadPdf = async () => {
+    // Use Electron's native PDF generation via IPC
+    if (!(window as any).require) {
+        alert("PDF download is only available in the desktop application.");
+        return;
+    }
 
-    doc.open();
+    const { ipcRenderer } = (window as any).require('electron');
+    
+    let htmlContent = "";
+    let filename = "Document.pdf";
+
+    // Clean company name for filename
+    const safeCompany = jobDetails.company.replace(/[^a-z0-9]/gi, '_');
+
     if (activeTab === 'resume') {
-        doc.write(results.resumeHtml);
+        htmlContent = results.resumeHtml;
+        filename = `Resume_${safeCompany}.pdf`;
     } else if (activeTab === 'coverLetter') {
-        const coverLetterHtml = `
+        filename = `CoverLetter_${safeCompany}.pdf`;
+        htmlContent = `
             <!DOCTYPE html>
             <html>
             <head>
@@ -36,12 +46,14 @@ const ResultsTabs: React.FC<ResultsTabsProps> = ({ results }) => {
                     @import url('https://fonts.googleapis.com/css2?family=Merriweather:wght@300;400;700&display=swap');
                     body {
                         font-family: 'Merriweather', Georgia, serif;
-                        line-height: 1.8;
+                        line-height: 1.6;
                         color: #1a202c;
                         max-width: 210mm;
                         margin: 0 auto;
                         padding: 25mm;
                         font-size: 11pt;
+                        -webkit-print-color-adjust: exact;
+                        print-color-adjust: exact;
                     }
                     @page { size: A4; margin: 0; }
                     p { margin-bottom: 1em; }
@@ -51,13 +63,14 @@ const ResultsTabs: React.FC<ResultsTabsProps> = ({ results }) => {
             <body><div class="content">${results.coverLetter}</div></body>
             </html>
         `;
-        doc.write(coverLetterHtml);
     }
-    doc.close();
-    setTimeout(() => {
-      iframeRef.current?.contentWindow?.focus();
-      iframeRef.current?.contentWindow?.print();
-    }, 500);
+
+    try {
+        await ipcRenderer.invoke('export-pdf', htmlContent, filename);
+    } catch (e) {
+        console.error("Failed to export PDF", e);
+        alert("Failed to save PDF.");
+    }
   };
 
   const tabs = [
@@ -180,8 +193,6 @@ const ResultsTabs: React.FC<ResultsTabsProps> = ({ results }) => {
 
   return (
     <div className="flex flex-col h-full animate-fade-in">
-      <iframe ref={iframeRef} className="hidden" title="PDF Generator" />
-      
       {/* Feedback Toast */}
       {copyFeedback && (
           <div className="fixed bottom-8 right-8 bg-slate-900 dark:bg-white text-white dark:text-slate-900 px-4 py-2 rounded-lg shadow-lg text-sm font-medium z-50 animate-fade-in">

@@ -6,6 +6,7 @@ const fs = (window as any).require ? (window as any).require('fs') : null;
 const path = (window as any).require ? (window as any).require('path') : null;
 
 const DATA_DIR_NAME = 'user_data';
+const KITS_DIR_NAME = 'Kits';
 const PROFILE_FILE_NAME = 'profile.md';
 const HISTORY_FILE_NAME = 'applications.csv';
 
@@ -58,19 +59,20 @@ export const fileSystemService = {
   /**
    * Appends an application record to the CSV file.
    * We use Base64 encoding for the heavy content fields to avoid CSV parsing issues with newlines/commas.
+   * Saves to user_data/Kits/applications.csv
    */
   saveApplicationToHistory: (record: ApplicationRecord) => {
     if (!fs || !path) return;
 
     try {
       const rootDir = (process as any).cwd();
-      const dataDir = path.join(rootDir, DATA_DIR_NAME);
+      const kitsDir = path.join(rootDir, DATA_DIR_NAME, KITS_DIR_NAME);
       
-      if (!fs.existsSync(dataDir)) {
-        fs.mkdirSync(dataDir, { recursive: true });
+      if (!fs.existsSync(kitsDir)) {
+        fs.mkdirSync(kitsDir, { recursive: true });
       }
 
-      const filePath = path.join(dataDir, HISTORY_FILE_NAME);
+      const filePath = path.join(kitsDir, HISTORY_FILE_NAME);
 
       // CSV Columns: ID, Date, Title, Company, B64_Assets
       // We serialize the entire assets object to JSON then Base64 it for the single column
@@ -94,14 +96,14 @@ export const fileSystemService = {
   },
 
   /**
-   * Loads and parses the CSV history.
+   * Loads and parses the CSV history from user_data/Kits/applications.csv
    */
   loadApplicationHistory: (): ApplicationRecord[] => {
     if (!fs || !path) return [];
 
     try {
       const rootDir = (process as any).cwd();
-      const filePath = path.join(rootDir, DATA_DIR_NAME, HISTORY_FILE_NAME);
+      const filePath = path.join(rootDir, DATA_DIR_NAME, KITS_DIR_NAME, HISTORY_FILE_NAME);
 
       if (!fs.existsSync(filePath)) return [];
 
@@ -114,12 +116,8 @@ export const fileSystemService = {
       const records: ApplicationRecord[] = [];
 
       // Simple CSV parser (assumes our specific format)
-      // We know the last column is a huge Base64 string, others are quoted strings
       for (let i = 1; i < lines.length; i++) {
         const line = lines[i];
-        // Regex to match: "val","val","val","val",BigBase64String
-        // Note: The Base64 string at the end might not be quoted in our simple append above if we didn't quote it? 
-        // Actually, we didn't quote the last col in the writer above. Let's parse carefully.
         
         const parts = line.match(/(".*?"|[^",\s]+)(?=\s*,|\s*$)/g);
         
@@ -128,7 +126,7 @@ export const fileSystemService = {
            const date = parts[1].replace(/^"|"$/g, '').replace(/""/g, '"');
            const title = parts[2].replace(/^"|"$/g, '').replace(/""/g, '"');
            const company = parts[3].replace(/^"|"$/g, '').replace(/""/g, '"');
-           const assetsB64 = parts[4]; // Base64 doesn't have spaces or commas usually, so it matches non-quoted
+           const assetsB64 = parts[4]; 
 
            try {
              const assetsJson = atob(assetsB64);

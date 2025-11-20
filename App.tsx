@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from 'react';
 import { AppState, AppStatus, UserProfile, JobDetails, ApplicationRecord } from './types';
 import { generateApplicationAssets } from './services/gemini';
@@ -14,6 +13,7 @@ function App() {
   const [apiKey, setApiKey] = useState<string | null>(null);
   const [darkMode, setDarkMode] = useState(false);
   const [activeTab, setActiveTab] = useState<'create' | 'applications'>('create');
+  const [isAppSaved, setIsAppSaved] = useState(false);
   const [state, setState] = useState<AppState>({
     status: AppStatus.IDLE,
     userProfile: null,
@@ -91,6 +91,7 @@ function App() {
       results: null,
       error: null
     });
+    setIsAppSaved(false);
   };
 
   const handleFileSelect = (content: string, fileName: string, persist: boolean) => {
@@ -122,6 +123,7 @@ function App() {
     }
 
     setState(prev => ({ ...prev, status: AppStatus.PROCESSING, error: null }));
+    setIsAppSaved(false);
 
     try {
       const results = await generateApplicationAssets(state.userProfile, state.jobDetails, apiKey);
@@ -152,9 +154,8 @@ function App() {
 
     fileSystemService.saveApplicationToHistory(record);
     
-    // Reset to idle so they can make another or go to list
-    resetApp();
-    setActiveTab('applications');
+    // Update state to reflect saved status without resetting the view
+    setIsAppSaved(true);
   };
 
   const resetApp = () => {
@@ -165,6 +166,7 @@ function App() {
         results: null,
         error: null
     }));
+    setIsAppSaved(false);
   };
 
   if (!apiKey) {
@@ -345,16 +347,33 @@ function App() {
                         </button>
                         <button 
                           onClick={handleSaveApplication}
-                          className="flex items-center gap-2 px-4 py-2 bg-brand-600 text-white text-sm font-semibold rounded-lg shadow hover:bg-brand-700 transition-all"
+                          disabled={isAppSaved}
+                          className={`flex items-center gap-2 px-4 py-2 text-sm font-semibold rounded-lg shadow transition-all ${
+                            isAppSaved 
+                              ? 'bg-emerald-600 text-white cursor-default hover:bg-emerald-600' 
+                              : 'bg-brand-600 text-white hover:bg-brand-700'
+                          }`}
                         >
-                          <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                          </svg>
-                          Application Sent
+                          {isAppSaved ? (
+                            <>
+                              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                              </svg>
+                              Kit Saved
+                            </>
+                          ) : (
+                            <>
+                              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7H5a2 2 0 00-2 2v9a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-3m-1 4l-3 3m0 0l-3-3m3 3V4" />
+                              </svg>
+                              Application Sent
+                            </>
+                          )}
                         </button>
                       </div>
                   </div>
-                  <ResultsTabs results={state.results} />
+                  {/* CRITICAL UPDATE: Passing jobDetails prop for correct PDF file naming */}
+                  <ResultsTabs results={state.results} jobDetails={state.jobDetails} />
                 </div>
               ) : (
                 <div className="h-full min-h-[600px] flex flex-col items-center justify-center text-slate-400 dark:text-slate-500 bg-white/50 dark:bg-slate-900/50 border border-dashed border-slate-200 dark:border-slate-800 rounded-2xl transition-colors">

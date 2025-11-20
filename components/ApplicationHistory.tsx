@@ -1,4 +1,3 @@
-
 import React, { useEffect, useState } from 'react';
 import { ApplicationRecord } from '../types';
 import { fileSystemService } from '../services/fileSystem';
@@ -68,7 +67,11 @@ const ApplicationHistory: React.FC = () => {
           {expandedId === app.id && (
             <div className="border-t border-slate-200 dark:border-slate-800 p-6 bg-slate-50/30 dark:bg-slate-900/30">
               <div className="h-[600px]">
-                <ResultsTabs results={app.assets} />
+                {/* Pass title/company to ResultsTabs so PDF download works nicely from history too */}
+                <ResultsTabs 
+                    results={app.assets} 
+                    jobDetails={{ title: app.title, company: app.company }} 
+                />
               </div>
             </div>
           )}

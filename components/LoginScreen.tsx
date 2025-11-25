@@ -77,6 +77,12 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ onLogin }) => {
           <p className="mt-6 text-center text-xs text-slate-400 dark:text-slate-500">
             Don't have a key? <a href="https://aistudio.google.com/app/apikey" target="_blank" className="text-brand-600 dark:text-brand-400 hover:underline">Get one from Google AI Studio</a>
           </p>
+
+          <div className="mt-8 text-center">
+             <p className="text-[10px] text-slate-300 dark:text-slate-600 uppercase tracking-widest font-medium">
+                Alon Tevet &copy; 2025
+             </p>
+          </div>
         </div>
       </div>
     </div>

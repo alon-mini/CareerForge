@@ -150,7 +150,17 @@ function App() {
       date: new Date().toISOString(),
       title: state.jobDetails.title,
       company: state.jobDetails.company || 'Unknown Company',
-      assets: state.results
+      assets: state.results,
+      overallStatus: 'active',
+      stages: [
+        {
+          id: '1',
+          label: 'Applied',
+          completed: true,
+          current: true,
+          date: new Date().toISOString()
+        }
+      ]
     };
 
     fileSystemService.saveApplicationToHistory(record);
@@ -395,6 +405,14 @@ function App() {
           </div>
         )}
       </main>
+
+      <footer className="py-6 border-t border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-950 transition-colors">
+        <div className="text-center">
+          <p className="text-xs font-medium text-slate-400 dark:text-slate-600">
+             CareerForge™ • Alon Tevet © 2025
+          </p>
+        </div>
+      </footer>
     </div>
   );
 }

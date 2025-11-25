@@ -1,3 +1,4 @@
+
 import { UserProfile } from "../types";
 
 const API_KEY_STORAGE_KEY = 'careerForge_apiKey';
@@ -6,77 +7,68 @@ const PROFILE_STORAGE_KEY = 'careerForge_default_profile';
 // Electron Node Integration imports
 const fs = (window as any).require ? (window as any).require('fs') : null;
 const path = (window as any).require ? (window as any).require('path') : null;
+const { ipcRenderer } = (window as any).require ? (window as any).require('electron') : { ipcRenderer: null };
 
-const ENV_VAR_NAME = 'GEMINI_API_KEY';
+const CONFIG_FILE = 'config.json';
+const DATA_DIR_NAME = 'user_data';
 
 export const authService = {
   
-  getEnvFilePath: (): string | null => {
-    if (!path || !(process as any).cwd) return null;
-    // We write to the root directory of the application
-    return path.join((process as any).cwd(), '.env');
-  },
-
-  writeApiKeyToEnv: (apiKey: string) => {
-    const envPath = authService.getEnvFilePath();
-    if (!envPath || !fs) return;
-
+  getConfigFile: (): string | null => {
+    if (!ipcRenderer || !path) return null;
     try {
-      let fileContent = '';
-      if (fs.existsSync(envPath)) {
-        fileContent = fs.readFileSync(envPath, 'utf-8');
-      }
-
-      const lines = fileContent.split('\n');
-      // Remove existing key if present
-      const filteredLines = lines.filter(line => !line.trim().startsWith(`${ENV_VAR_NAME}=`));
-      
-      // Add new key
-      filteredLines.push(`${ENV_VAR_NAME}=${apiKey}`);
-      
-      // Write back
-      fs.writeFileSync(envPath, filteredLines.join('\n').trim(), 'utf-8');
-      console.log(`Saved API Key to ${envPath}`);
-    } catch (error) {
-      console.error("Failed to write API key to .env file:", error);
+        const rootDir = ipcRenderer.sendSync('get-user-data-path');
+        return path.join(rootDir, DATA_DIR_NAME, CONFIG_FILE);
+    } catch {
+        return null;
     }
   },
 
-  readApiKeyFromEnv: (): string | null => {
-    const envPath = authService.getEnvFilePath();
-    if (!envPath || !fs || !fs.existsSync(envPath)) return null;
+  writeApiKeyToDisk: (apiKey: string) => {
+    const configPath = authService.getConfigFile();
+    if (!configPath || !fs || !path) return;
 
     try {
-      const fileContent = fs.readFileSync(envPath, 'utf-8');
-      const lines = fileContent.split('\n');
-      for (const line of lines) {
-        const trimmed = line.trim();
-        if (trimmed.startsWith(`${ENV_VAR_NAME}=`)) {
-           // Extract value, handling potential quotes
-           let val = trimmed.substring(`${ENV_VAR_NAME}=`.length).trim();
-           if (val.startsWith('"') && val.endsWith('"')) {
-             val = val.slice(1, -1);
-           }
-           return val;
-        }
+      // Ensure dir exists
+      const dir = path.dirname(configPath);
+      if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+
+      let config = {};
+      if (fs.existsSync(configPath)) {
+        config = JSON.parse(fs.readFileSync(configPath, 'utf-8'));
       }
+      
+      config = { ...config, apiKey };
+      
+      fs.writeFileSync(configPath, JSON.stringify(config, null, 2), 'utf-8');
     } catch (error) {
-      console.error("Failed to read API key from .env file:", error);
+      console.error("Failed to write config:", error);
+    }
+  },
+
+  readApiKeyFromDisk: (): string | null => {
+    const configPath = authService.getConfigFile();
+    if (!configPath || !fs || !fs.existsSync(configPath)) return null;
+
+    try {
+      const config = JSON.parse(fs.readFileSync(configPath, 'utf-8'));
+      return config.apiKey || null;
+    } catch (error) {
+      console.error("Failed to read config:", error);
     }
     return null;
   },
 
-  removeApiKeyFromEnv: () => {
-    const envPath = authService.getEnvFilePath();
-    if (!envPath || !fs || !fs.existsSync(envPath)) return;
+  removeApiKeyFromDisk: () => {
+    const configPath = authService.getConfigFile();
+    if (!configPath || !fs || !fs.existsSync(configPath)) return;
 
     try {
-      const fileContent = fs.readFileSync(envPath, 'utf-8');
-      const lines = fileContent.split('\n');
-      const filteredLines = lines.filter(line => !line.trim().startsWith(`${ENV_VAR_NAME}=`));
-      fs.writeFileSync(envPath, filteredLines.join('\n').trim(), 'utf-8');
+      const config = JSON.parse(fs.readFileSync(configPath, 'utf-8'));
+      delete config.apiKey;
+      fs.writeFileSync(configPath, JSON.stringify(config, null, 2), 'utf-8');
     } catch (error) {
-      console.error("Failed to remove API key from .env file:", error);
+      console.error("Failed to update config:", error);
     }
   },
 
@@ -87,11 +79,11 @@ export const authService = {
     if (remember) {
       // Backup to localStorage
       localStorage.setItem(API_KEY_STORAGE_KEY, apiKey);
-      // Write to .env file for cold boot persistence (Desktop App)
-      authService.writeApiKeyToEnv(apiKey);
+      // Write to disk for cold boot persistence
+      authService.writeApiKeyToDisk(apiKey);
     } else {
       localStorage.removeItem(API_KEY_STORAGE_KEY);
-      authService.removeApiKeyFromEnv();
+      authService.removeApiKeyFromDisk();
     }
   },
 
@@ -104,10 +96,10 @@ export const authService = {
     const localKey = localStorage.getItem(API_KEY_STORAGE_KEY);
     if (localKey) return localKey;
 
-    // 3. Check .env file (disk persistence for desktop app)
-    const envKey = authService.readApiKeyFromEnv();
-    if (envKey) {
-        return envKey;
+    // 3. Check disk (desktop app persistence)
+    const diskKey = authService.readApiKeyFromDisk();
+    if (diskKey) {
+        return diskKey;
     }
 
     return null;
@@ -116,7 +108,7 @@ export const authService = {
   clearApiKey: () => {
     localStorage.removeItem(API_KEY_STORAGE_KEY);
     sessionStorage.removeItem(API_KEY_STORAGE_KEY);
-    authService.removeApiKeyFromEnv();
+    authService.removeApiKeyFromDisk();
   },
 
   getUserProfile: (): UserProfile | null => {

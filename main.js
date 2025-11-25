@@ -41,6 +41,11 @@ app.on('window-all-closed', () => {
   }
 });
 
+// Sync handler to get the User Data path (Roaming/AppData)
+ipcMain.on('get-user-data-path', (event) => {
+  event.returnValue = app.getPath('userData');
+});
+
 // IPC Handler for PDF Generation with Text Layer
 ipcMain.handle('export-pdf', async (event, htmlContent, defaultFilename) => {
   let pdfWindow = new BrowserWindow({ 

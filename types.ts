@@ -34,12 +34,25 @@ export interface GeneratedAssets {
   emailKit: EmailKit;
 }
 
+export type ApplicationStatus = 'active' | 'rejected' | 'hired' | 'ghosted';
+
+export interface RecruitmentStage {
+  id: string;
+  label: string; // e.g. "Phone Screen", "Technical"
+  completed: boolean;
+  current: boolean;
+  date?: string;
+}
+
 export interface ApplicationRecord {
   id: string;
   date: string;
   title: string;
   company: string;
   assets: GeneratedAssets;
+  // New tracking fields
+  overallStatus: ApplicationStatus;
+  stages: RecruitmentStage[];
 }
 
 export enum AppStatus {

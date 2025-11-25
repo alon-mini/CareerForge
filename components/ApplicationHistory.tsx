@@ -1,19 +1,83 @@
+
 import React, { useEffect, useState } from 'react';
-import { ApplicationRecord } from '../types';
+import { ApplicationRecord, RecruitmentStage, ApplicationStatus } from '../types';
 import { fileSystemService } from '../services/fileSystem';
 import ResultsTabs from './ResultsTabs';
+
+const STATUS_CONFIG: Record<ApplicationStatus, { label: string, color: string, bg: string, border: string }> = {
+  active: { label: 'In Progress', color: 'text-brand-600 dark:text-brand-400', bg: 'bg-brand-50 dark:bg-brand-900/20', border: 'border-brand-200 dark:border-brand-800' },
+  rejected: { label: 'Terminated', color: 'text-red-600 dark:text-red-400', bg: 'bg-red-50 dark:bg-red-900/20', border: 'border-red-200 dark:border-red-800' },
+  hired: { label: 'Offer / Hired', color: 'text-emerald-600 dark:text-emerald-400', bg: 'bg-emerald-50 dark:bg-emerald-900/20', border: 'border-emerald-200 dark:border-emerald-800' },
+  ghosted: { label: 'No Response', color: 'text-slate-500 dark:text-slate-400', bg: 'bg-slate-50 dark:bg-slate-800/50', border: 'border-slate-200 dark:border-slate-700' }
+};
 
 const ApplicationHistory: React.FC = () => {
   const [history, setHistory] = useState<ApplicationRecord[]>([]);
   const [expandedId, setExpandedId] = useState<string | null>(null);
+  const [newStageName, setNewStageName] = useState<string>('');
+  const [addingStageTo, setAddingStageTo] = useState<string | null>(null);
 
   useEffect(() => {
     const records = fileSystemService.loadApplicationHistory();
-    setHistory(records);
+    // Migration helper: If records don't have stages/status, add defaults
+    const migrated = records.map(r => ({
+      ...r,
+      overallStatus: r.overallStatus || 'active',
+      stages: r.stages || [{ id: '1', label: 'Applied', completed: true, current: true, date: r.date }]
+    }));
+    setHistory(migrated);
   }, []);
 
   const toggleExpand = (id: string) => {
     setExpandedId(expandedId === id ? null : id);
+    setAddingStageTo(null);
+    setNewStageName('');
+  };
+
+  const updateRecord = (updatedRecord: ApplicationRecord) => {
+    // 1. Update local state
+    setHistory(prev => prev.map(r => r.id === updatedRecord.id ? updatedRecord : r));
+    // 2. Persist to disk
+    fileSystemService.updateApplicationInHistory(updatedRecord);
+  };
+
+  const setOverallStatus = (record: ApplicationRecord, status: ApplicationStatus) => {
+    const updated = { ...record, overallStatus: status };
+    updateRecord(updated);
+  };
+
+  const addNewStage = (record: ApplicationRecord) => {
+    if (!newStageName.trim()) return;
+
+    const newStage: RecruitmentStage = {
+      id: Date.now().toString(),
+      label: newStageName.trim(),
+      completed: false,
+      current: false
+    };
+
+    const updated = { ...record, stages: [...record.stages, newStage] };
+    updateRecord(updated);
+    setNewStageName('');
+    setAddingStageTo(null);
+  };
+
+  const setStageCurrent = (record: ApplicationRecord, stageIndex: number) => {
+    const updatedStages = record.stages.map((s, idx) => ({
+      ...s,
+      completed: idx < stageIndex, // Mark previous as completed
+      current: idx === stageIndex, // Mark this as current
+      date: idx === stageIndex && !s.date ? new Date().toISOString() : s.date
+    }));
+
+    // If setting a stage, ensure overall status isn't 'rejected' unless user explicitly sets it,
+    // but usually if you move a stage, it implies activity.
+    let status = record.overallStatus;
+    if (status === 'rejected' || status === 'ghosted') {
+        status = 'active';
+    }
+
+    updateRecord({ ...record, stages: updatedStages, overallStatus: status });
   };
 
   if (history.length === 0) {
@@ -31,52 +95,220 @@ const ApplicationHistory: React.FC = () => {
   }
 
   return (
-    <div className="space-y-4 animate-fade-in pb-10">
-      <h2 className="text-2xl font-bold text-slate-900 dark:text-white mb-6">Sent Applications</h2>
+    <div className="space-y-6 animate-fade-in pb-20">
+      <div className="flex items-center justify-between">
+          <h2 className="text-2xl font-bold text-slate-900 dark:text-white">Application Tracker</h2>
+          <span className="text-sm text-slate-500 dark:text-slate-400 bg-slate-100 dark:bg-slate-800 px-3 py-1 rounded-full">
+            {history.length} Applications
+          </span>
+      </div>
       
-      {history.map((app) => (
-        <div 
-          key={app.id} 
-          className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl overflow-hidden shadow-sm transition-all duration-300"
-        >
-          <button
-            onClick={() => toggleExpand(app.id)}
-            className="w-full flex items-center justify-between p-5 text-left hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors focus:outline-none"
+      {history.map((app) => {
+        const statusConfig = STATUS_CONFIG[app.overallStatus] || STATUS_CONFIG.active;
+        
+        return (
+          <div 
+            key={app.id} 
+            className={`
+                bg-white dark:bg-slate-900 border rounded-xl overflow-hidden shadow-sm transition-all duration-300
+                ${app.overallStatus === 'rejected' ? 'opacity-75 border-slate-200 dark:border-slate-800' : 'border-slate-200 dark:border-slate-700'}
+            `}
           >
-            <div className="flex items-center gap-4">
-              <div className="h-10 w-10 rounded-full bg-brand-100 dark:bg-brand-900/30 text-brand-600 dark:text-brand-400 flex items-center justify-center font-bold text-lg">
-                {app.company.charAt(0).toUpperCase()}
+            {/* CARD HEADER */}
+            <button
+              onClick={() => toggleExpand(app.id)}
+              className="w-full flex items-center justify-between p-5 text-left hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors focus:outline-none group"
+            >
+              <div className="flex items-center gap-4">
+                <div className={`
+                    h-12 w-12 rounded-xl flex items-center justify-center font-bold text-lg shadow-sm
+                    ${app.overallStatus === 'rejected' 
+                        ? 'bg-slate-100 dark:bg-slate-800 text-slate-500' 
+                        : 'bg-gradient-to-br from-white to-slate-50 dark:from-slate-800 dark:to-slate-900 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white'
+                    }
+                `}>
+                  {app.company.charAt(0).toUpperCase()}
+                </div>
+                <div>
+                  <h3 className="font-bold text-slate-900 dark:text-white text-lg group-hover:text-brand-600 dark:group-hover:text-brand-400 transition-colors">
+                    {app.title} <span className="text-slate-400 font-normal text-base">at</span> {app.company}
+                  </h3>
+                  <div className="flex items-center gap-3 mt-1">
+                      <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium ${statusConfig.bg} ${statusConfig.color} border ${statusConfig.border}`}>
+                          {statusConfig.label}
+                      </span>
+                      <span className="text-xs text-slate-400 dark:text-slate-500">
+                        Applied {new Date(app.date).toLocaleDateString()}
+                      </span>
+                  </div>
+                </div>
               </div>
-              <div>
-                <h3 className="font-bold text-slate-900 dark:text-white text-lg">
-                  {app.title} <span className="text-slate-400 font-normal text-base">at</span> {app.company}
-                </h3>
-                <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
-                  Applied on {new Date(app.date).toLocaleDateString()}
-                </p>
+              
+              <div className={`transform transition-transform duration-300 text-slate-400 ${expandedId === app.id ? 'rotate-180 text-brand-500' : ''}`}>
+                <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                </svg>
               </div>
-            </div>
-            
-            <div className={`transform transition-transform duration-300 ${expandedId === app.id ? 'rotate-180' : ''}`}>
-              <svg className="w-5 h-5 text-slate-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-              </svg>
-            </div>
-          </button>
+            </button>
 
-          {expandedId === app.id && (
-            <div className="border-t border-slate-200 dark:border-slate-800 p-6 bg-slate-50/30 dark:bg-slate-900/30">
-              <div className="h-[600px]">
-                {/* Pass title/company to ResultsTabs so PDF download works nicely from history too */}
-                <ResultsTabs 
-                    results={app.assets} 
-                    jobDetails={{ title: app.title, company: app.company }} 
-                />
+            {/* EXPANDED CONTENT */}
+            {expandedId === app.id && (
+              <div className="border-t border-slate-200 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-950/50">
+                
+                {/* --- TRACKER UI --- */}
+                <div className="p-6 border-b border-slate-200 dark:border-slate-800">
+                    <div className="flex flex-col md:flex-row md:items-start gap-8">
+                        
+                        {/* Status Controls */}
+                        <div className="w-full md:w-64 flex-shrink-0 space-y-4">
+                            <h4 className="text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">Application Status</h4>
+                            <div className="flex flex-col gap-2">
+                                <button 
+                                    onClick={() => setOverallStatus(app, 'active')}
+                                    className={`flex items-center px-3 py-2 text-sm font-medium rounded-lg transition-colors border ${app.overallStatus === 'active' ? 'bg-brand-50 border-brand-200 text-brand-700 dark:bg-brand-900/20 dark:border-brand-800 dark:text-brand-400' : 'bg-white border-slate-200 text-slate-600 hover:bg-slate-50 dark:bg-slate-900 dark:border-slate-700 dark:text-slate-400'}`}
+                                >
+                                    <div className={`w-2 h-2 rounded-full mr-2 ${app.overallStatus === 'active' ? 'bg-brand-500' : 'bg-slate-300'}`}></div>
+                                    In Progress
+                                </button>
+                                <button 
+                                    onClick={() => setOverallStatus(app, 'ghosted')}
+                                    className={`flex items-center px-3 py-2 text-sm font-medium rounded-lg transition-colors border ${app.overallStatus === 'ghosted' ? 'bg-slate-100 border-slate-300 text-slate-700 dark:bg-slate-800 dark:border-slate-600 dark:text-slate-300' : 'bg-white border-slate-200 text-slate-600 hover:bg-slate-50 dark:bg-slate-900 dark:border-slate-700 dark:text-slate-400'}`}
+                                >
+                                    <div className={`w-2 h-2 rounded-full mr-2 ${app.overallStatus === 'ghosted' ? 'bg-slate-500' : 'bg-slate-300'}`}></div>
+                                    No Response / Ghosted
+                                </button>
+                                <button 
+                                    onClick={() => setOverallStatus(app, 'hired')}
+                                    className={`flex items-center px-3 py-2 text-sm font-medium rounded-lg transition-colors border ${app.overallStatus === 'hired' ? 'bg-emerald-50 border-emerald-200 text-emerald-700 dark:bg-emerald-900/20 dark:border-emerald-800 dark:text-emerald-400' : 'bg-white border-slate-200 text-slate-600 hover:bg-slate-50 dark:bg-slate-900 dark:border-slate-700 dark:text-slate-400'}`}
+                                >
+                                    <div className={`w-2 h-2 rounded-full mr-2 ${app.overallStatus === 'hired' ? 'bg-emerald-500' : 'bg-slate-300'}`}></div>
+                                    Offer / Hired
+                                </button>
+                                <button 
+                                    onClick={() => setOverallStatus(app, 'rejected')}
+                                    className={`flex items-center px-3 py-2 text-sm font-medium rounded-lg transition-colors border ${app.overallStatus === 'rejected' ? 'bg-red-50 border-red-200 text-red-700 dark:bg-red-900/20 dark:border-red-800 dark:text-red-400' : 'bg-white border-slate-200 text-slate-600 hover:bg-slate-50 dark:bg-slate-900 dark:border-slate-700 dark:text-slate-400'}`}
+                                >
+                                    <div className={`w-2 h-2 rounded-full mr-2 ${app.overallStatus === 'rejected' ? 'bg-red-500' : 'bg-slate-300'}`}></div>
+                                    Terminated / Rejected
+                                </button>
+                            </div>
+                        </div>
+
+                        {/* Interactive Timeline */}
+                        <div className="flex-grow">
+                             <div className="flex items-center justify-between mb-4">
+                                <h4 className="text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">Recruitment Pipeline</h4>
+                             </div>
+                             
+                             <div className="relative pl-4 border-l-2 border-slate-200 dark:border-slate-700 space-y-6">
+                                {app.stages.map((stage, idx) => (
+                                    <div key={stage.id} className="relative group">
+                                        {/* Dot on Timeline */}
+                                        <div 
+                                            className={`
+                                                absolute -left-[21px] top-1.5 w-4 h-4 rounded-full border-2 box-content bg-white dark:bg-slate-900 cursor-pointer transition-colors
+                                                ${stage.current 
+                                                    ? 'border-brand-500 ring-4 ring-brand-100 dark:ring-brand-900/30' 
+                                                    : stage.completed 
+                                                        ? 'border-emerald-500 bg-emerald-500' 
+                                                        : 'border-slate-300 dark:border-slate-600'
+                                                }
+                                            `}
+                                            onClick={() => setStageCurrent(app, idx)}
+                                        >
+                                            {stage.completed && !stage.current && (
+                                                <svg className="w-2.5 h-2.5 text-white absolute top-0.5 left-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" />
+                                                </svg>
+                                            )}
+                                        </div>
+
+                                        <div className="flex items-start justify-between">
+                                            <div onClick={() => setStageCurrent(app, idx)} className="cursor-pointer">
+                                                <h5 className={`text-sm font-semibold transition-colors ${stage.current ? 'text-brand-600 dark:text-brand-400' : 'text-slate-700 dark:text-slate-300'}`}>
+                                                    {stage.label}
+                                                </h5>
+                                                {stage.date && (
+                                                    <p className="text-xs text-slate-400 mt-0.5">
+                                                        {new Date(stage.date).toLocaleDateString()}
+                                                    </p>
+                                                )}
+                                            </div>
+                                            
+                                            {stage.current && app.overallStatus === 'active' && (
+                                                <span className="text-[10px] font-bold uppercase text-brand-500 bg-brand-50 dark:bg-brand-900/30 px-2 py-0.5 rounded">
+                                                    Current Stage
+                                                </span>
+                                            )}
+                                        </div>
+                                    </div>
+                                ))}
+
+                                {/* Add Stage Button */}
+                                <div className="relative pt-2">
+                                    <div className="absolute -left-[20px] top-3.5 w-3 h-3 rounded-full bg-slate-200 dark:bg-slate-700"></div>
+                                    
+                                    {addingStageTo === app.id ? (
+                                        <div className="flex items-center gap-2">
+                                            <input 
+                                                autoFocus
+                                                type="text" 
+                                                value={newStageName}
+                                                onChange={(e) => setNewStageName(e.target.value)}
+                                                placeholder="e.g. Home Assignment"
+                                                className="text-sm px-3 py-1.5 rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 focus:ring-2 focus:ring-brand-500 outline-none w-48"
+                                                onKeyDown={(e) => e.key === 'Enter' && addNewStage(app)}
+                                            />
+                                            <button 
+                                                onClick={() => addNewStage(app)}
+                                                className="p-1.5 bg-brand-600 text-white rounded-lg hover:bg-brand-700"
+                                            >
+                                                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                                                </svg>
+                                            </button>
+                                            <button 
+                                                onClick={() => setAddingStageTo(null)}
+                                                className="p-1.5 text-slate-400 hover:text-slate-600"
+                                            >
+                                                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                                                </svg>
+                                            </button>
+                                        </div>
+                                    ) : (
+                                        <button 
+                                            onClick={() => setAddingStageTo(app.id)}
+                                            className="text-xs font-medium text-slate-500 hover:text-brand-600 flex items-center gap-1 transition-colors ml-1"
+                                        >
+                                            <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+                                            </svg>
+                                            Add custom stage
+                                        </button>
+                                    )}
+                                </div>
+                             </div>
+                        </div>
+                    </div>
+                </div>
+
+                {/* --- ORIGINAL KIT --- */}
+                <div className="p-6">
+                  <h4 className="text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-4">Application Kit</h4>
+                  <div className="h-[600px] border border-slate-200 dark:border-slate-700 rounded-xl overflow-hidden bg-white dark:bg-slate-900">
+                    <ResultsTabs 
+                        results={app.assets} 
+                        jobDetails={{ title: app.title, company: app.company }} 
+                    />
+                  </div>
+                </div>
+
               </div>
-            </div>
-          )}
-        </div>
-      ))}
+            )}
+          </div>
+        );
+      })}
     </div>
   );
 };

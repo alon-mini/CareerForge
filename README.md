@@ -1,6 +1,6 @@
 # CareerForge - Desktop AI Job Search Assistant
 
-CareerForge is a powerful, desktop-based tool designed to supercharge your job search. Powered by Google's Gemini 2.5 Pro, it takes your professional "Source of Truth" (a markdown profile) and a target Job Description to instantly generate a perfectly tailored application kit.
+CareerForge is a powerful, desktop-based tool designed to supercharge your job search. Powered by Google's `gemini-3-pro-preview` model, it takes your professional "Source of Truth" (a markdown profile) and a target Job Description to instantly generate a perfectly tailored application kit and helps you track it from start to finish.
 
 ![CareerForge](logoc.png)
 
@@ -10,10 +10,8 @@ CareerForge is a powerful, desktop-based tool designed to supercharge your job s
 *   **Human-Centric Cover Letters**: Writes authentic, non-robotic cover letters that connect your past wins to future challenges.
 *   **Strategy & Interview Prep**: Provides a narrative strategy ("The Story") and generates 5 tough, role-specific interview questions with answer guides.
 *   **Outreach Kit**: Pre-written LinkedIn connection notes and post-interview thank you emails.
-*   **Local Data Persistence**: 
-    *   Save your "Source of Truth" profile to disk so you never have to re-upload it.
-    *   Securely stores your API Key locally.
-*   **Application History**: Tracks every application you send. View past resumes and cover letters in a dedicated "Applications" tab.
+*   **Interactive Application Tracker**: Don't just save your applications—manage them. Track each opportunity through a customizable, visual timeline from "Applied" to "Offer". Add custom stages, mark progress, and see your entire pipeline at a glance.
+*   **Persistent & Safe Data**: Your profile, API key, and application history are stored securely in your operating system's standard application data folder. This means your data is safe and persists even when you update the application.
 *   **Dark Mode**: A sleek, high-contrast UI designed for focused work.
 *   **PDF Generation**: Native PDF export for Resumes and Cover Letters.
 
@@ -35,15 +33,18 @@ CareerForge is a powerful, desktop-based tool designed to supercharge your job s
     npm install
     ```
 
-3.  **Build & Run (Development)**
-    Since this is an Electron app wrapping a React frontend, you typically need to build the React app and then start Electron.
-    
+3.  **Run in Development**
     ```bash
-    # If using a standard script setup:
-    npm run electron:dev
+    npm run app
     ```
-    
-    *Note: Ensure your `package.json` is configured to point "main" to `main.js`.*
+    This will build the React app and then start the Electron process.
+
+4.  **Package for Distribution**
+    To create a distributable `.exe` for Windows, run:
+    ```bash
+    npm run dist
+    ```
+    The installer will be located in the `release/` folder.
 
 ## 📖 Usage Guide
 
@@ -55,7 +56,7 @@ Upon first launch, you will be asked for your **Gemini API Key**.
 Your "Source of Truth" is a `.md` (Markdown) or `.txt` file containing your entire professional history.
 *   **Upload**: Drag and drop your file into the upload zone.
 *   **Persist**: Check the box **"Remember this profile for future sessions"**.
-    *   This saves your file to a `user_data/` folder in the app's root directory.
+    *   This saves your file to the application's secure data directory.
     *   On next boot, the app will automatically load this profile.
 
 ### 3. Forging an Application
@@ -72,17 +73,24 @@ Once generation is complete (usually 10-20 seconds), explore the tabs:
 *   **Interview Prep**: Study the 5 generated questions and answer strategies.
 *   **Outreach**: Copy the LinkedIn note or Thank You email templates.
 
-### 5. Tracking History
-*   If you decide to apply, click the **"Application Sent"** button in the top right corner of the results view.
-*   This saves the entire kit to a local `.csv` file.
-*   Navigate to the **"Applications"** tab in the top menu to view your history. Click on any row to expand and see the full kit generated for that specific application.
+### 5. Tracking Your Application
+1.  **Save the Kit**: After generating assets for a role you've applied to, click the **"Application Sent"** button. This saves the entire kit to your local history.
+2.  **Manage Your Pipeline**: Navigate to the **"Applications"** tab. Here you'll find all your saved applications.
+3.  **Track Progress**: Click on an application to expand its details. You'll see a visual timeline of your recruitment process. Click on a stage (e.g., "Phone Screen") to mark it as your current step.
+4.  **Customize Stages**: Use the "Add custom stage" button to add unique steps to your process, like "Home Assignment" or "Team Fit Interview".
+5.  **Update Status**: Quickly update the overall status of an application to "Terminated", "Offer/Hired", or "Ghosted" using the status controls.
 
 ## 📂 Data Structure
 
-The app creates a `user_data` folder in the root directory to store your local data:
+The app stores all your data in your system's standard user data directory to ensure it persists between application updates.
 
-*   `user_data/profile.md`: Your saved source of truth.
-*   `user_data/applications.csv`: A database of your past applications (content is Base64 encoded for safety).
+You can find it here:
+*   **Windows**: `C:\Users\<YourName>\AppData\Roaming\CareerForge`
+
+Inside that folder, you will find:
+*   `user_data/profile.md`: Your saved "Source of Truth" profile.
+*   `user_data/config.json`: Your securely stored API key (if you chose "Remember Key").
+*   `user_data/Kits/applications.json`: A structured JSON file containing your entire application history, including all generated assets and tracker statuses.
 
 ## 🎨 Customization
 

@@ -1,4 +1,3 @@
-
 import { GoogleGenAI, Type, Schema } from "@google/genai";
 import { UserProfile, JobDetails, GeneratedAssets } from "../types";
 
@@ -49,13 +48,16 @@ const responseSchema: Schema = {
 export const generateApplicationAssets = async (
   profile: UserProfile,
   job: JobDetails,
-  apiKey: string
+  apiKey: string,
+  onProgress?: (message: string, percentage: number) => void
 ): Promise<GeneratedAssets> => {
   if (!apiKey) {
     throw new Error("API Key is missing. Please log in again.");
   }
 
   const ai = new GoogleGenAI({ apiKey });
+
+  if (onProgress) onProgress("Initializing AI Agent...", 5);
 
   const prompt = `
     You are an expert executive career coach and professional resume writer.
@@ -141,6 +143,8 @@ export const generateApplicationAssets = async (
   `;
 
   try {
+    if (onProgress) onProgress("Drafting assets (this takes ~15s)...", 15);
+    
     const response = await ai.models.generateContent({
       model: MODEL_NAME,
       contents: prompt,
@@ -150,6 +154,8 @@ export const generateApplicationAssets = async (
         systemInstruction: "You are a world-class career strategist. You prioritize concise, high-impact communication. You NEVER produce a resume longer than 1 page. You write cover letters that sound like real humans, not robots. You never use Markdown syntax in plain text fields.",
       },
     });
+
+    if (onProgress) onProgress("Parsing AI response...", 45);
 
     const text = response.text;
     if (!text) {
@@ -173,11 +179,14 @@ export const refineResume = async (
     currentHtml: string,
     job: JobDetails,
     profile: UserProfile,
-    apiKey: string
+    apiKey: string,
+    onProgress?: (message: string, percentage: number) => void
 ): Promise<string> => {
     if (!apiKey) throw new Error("API Key missing");
 
     const ai = new GoogleGenAI({ apiKey });
+
+    if (onProgress) onProgress("Starting QA Audit...", 50);
 
     const prompt = `
         You are a Senior Technical Recruiter and Quality Assurance Specialist acting as a "Judge" for a resume application.
@@ -211,6 +220,8 @@ export const refineResume = async (
     `;
 
     try {
+        if (onProgress) onProgress("Judge is reviewing formatting & keywords...", 65);
+
         const response = await ai.models.generateContent({
             model: MODEL_NAME, // Using the smartest model for the "Judge" role
             contents: prompt,
@@ -219,11 +230,14 @@ export const refineResume = async (
             }
         });
 
+        if (onProgress) onProgress("Applying surgical fixes...", 85);
+
         let cleanedHtml = response.text || "";
         
         // Cleanup if the model wraps it in markdown despite instructions
         cleanedHtml = cleanedHtml.replace(/^```html/, '').replace(/```$/, '').trim();
         
+        if (onProgress) onProgress("Finalizing document...", 95);
         return cleanedHtml;
 
     } catch (error) {

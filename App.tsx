@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from 'react';
 import { AppState, AppStatus, UserProfile, JobDetails, ApplicationRecord, GeneratedAssets } from './types';
 import { generateApplicationAssets, refineResume } from './services/gemini';
@@ -15,6 +14,7 @@ function App() {
   const [darkMode, setDarkMode] = useState(false);
   const [activeTab, setActiveTab] = useState<'create' | 'applications'>('create');
   const [isAppSaved, setIsAppSaved] = useState(false);
+  const [loadingProgress, setLoadingProgress] = useState({ message: 'Starting...', percent: 0 });
   const [state, setState] = useState<AppState>({
     status: AppStatus.IDLE,
     userProfile: null,
@@ -125,10 +125,20 @@ function App() {
 
     setState(prev => ({ ...prev, status: AppStatus.PROCESSING, error: null }));
     setIsAppSaved(false);
+    setLoadingProgress({ message: 'Initializing...', percent: 0 });
+
+    const updateProgress = (message: string, percent: number) => {
+      setLoadingProgress({ message, percent });
+    };
 
     try {
       // Step 1: Initial Generation
-      const results = await generateApplicationAssets(state.userProfile, state.jobDetails, apiKey);
+      const results = await generateApplicationAssets(
+        state.userProfile, 
+        state.jobDetails, 
+        apiKey,
+        updateProgress
+      );
       
       // Step 2: Surgical Refinement (LLM as a Judge)
       // We pass the initially generated HTML to a second AI call to fix cut-offs and enforce alignment.
@@ -136,7 +146,8 @@ function App() {
           results.resumeHtml, 
           state.jobDetails, 
           state.userProfile, 
-          apiKey
+          apiKey,
+          updateProgress
       );
 
       // Update the results with the refined HTML
@@ -145,11 +156,16 @@ function App() {
           resumeHtml: refinedHtml
       };
 
-      setState(prev => ({
-        ...prev,
-        status: AppStatus.COMPLETE,
-        results: finalResults
-      }));
+      setLoadingProgress({ message: 'Done!', percent: 100 });
+      // Small delay to let the user see 100%
+      setTimeout(() => {
+        setState(prev => ({
+            ...prev,
+            status: AppStatus.COMPLETE,
+            results: finalResults
+        }));
+      }, 500);
+
     } catch (err) {
       setState(prev => ({
         ...prev,
@@ -212,7 +228,9 @@ function App() {
 
   return (
     <div className="min-h-screen bg-slate-50 dark:bg-slate-950 font-sans text-slate-900 dark:text-slate-100 flex flex-col transition-colors duration-300">
-      {state.status === AppStatus.PROCESSING && <LoadingOverlay />}
+      {state.status === AppStatus.PROCESSING && (
+        <LoadingOverlay message={loadingProgress.message} progress={loadingProgress.percent} />
+      )}
 
       {/* Navigation Bar */}
       <nav className="sticky top-0 z-30 bg-white/80 dark:bg-slate-900/80 backdrop-blur-md border-b border-slate-200 dark:border-slate-800 px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between transition-colors duration-300">

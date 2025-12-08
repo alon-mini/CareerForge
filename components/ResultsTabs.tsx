@@ -1,5 +1,4 @@
-
-import React, { useState } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { GeneratedAssets, JobDetails, InterviewQuestion } from '../types';
 
 interface ResultsTabsProps {
@@ -55,6 +54,7 @@ const ResultsTabs: React.FC<ResultsTabsProps> = ({ results, jobDetails, onUpdate
   const [copyFeedback, setCopyFeedback] = useState<string | null>(null);
   const [isEditing, setIsEditing] = useState(false);
   const [selectedTheme, setSelectedTheme] = useState<string>('original');
+  const iframeRef = useRef<HTMLIFrameElement>(null);
 
   const handleCopy = (text: string) => {
     navigator.clipboard.writeText(text);
@@ -83,6 +83,49 @@ const ResultsTabs: React.FC<ResultsTabsProps> = ({ results, jobDetails, onUpdate
     );
   };
 
+  // Manage WYSIWYG editing inside the iframe
+  useEffect(() => {
+    const iframe = iframeRef.current;
+    if (!iframe || activeTab !== 'resume') return;
+
+    // Wait for load if needed, or act immediately if already loaded
+    const enableEditing = () => {
+        if (!iframe.contentDocument || !iframe.contentDocument.body) return;
+        
+        if (isEditing) {
+            iframe.contentDocument.body.contentEditable = "true";
+            iframe.contentDocument.body.style.outline = "none";
+            // Add visual cue for editing inside the iframe
+            const style = iframe.contentDocument.createElement('style');
+            style.id = "editor-styles";
+            style.innerHTML = `
+                *[contenteditable]:hover { outline: 1px dashed #3b82f6; cursor: text; }
+                *[contenteditable]:focus { outline: 2px solid #3b82f6; background-color: rgba(59, 130, 246, 0.05); }
+            `;
+            iframe.contentDocument.head.appendChild(style);
+        } else {
+            // When turning OFF editing, save the content
+            iframe.contentDocument.body.contentEditable = "false";
+            const editorStyle = iframe.contentDocument.getElementById('editor-styles');
+            if (editorStyle) editorStyle.remove();
+            
+            // Capture the full HTML including root and head
+            const newHtml = iframe.contentDocument.documentElement.outerHTML;
+            // Clean up internal editor attributes if any (browsers usually handle this, but good to be safe)
+            updateField('resumeHtml', newHtml);
+        }
+    };
+
+    // If iframe is already loaded, run immediately
+    if (iframe.contentDocument && iframe.contentDocument.readyState === 'complete') {
+        enableEditing();
+    } else {
+        iframe.onload = enableEditing;
+    }
+
+  }, [isEditing, activeTab]);
+
+
   const handleDownloadPdf = async () => {
     // Use Electron's native PDF generation via IPC
     if (!(window as any).require) {
@@ -99,7 +142,12 @@ const ResultsTabs: React.FC<ResultsTabsProps> = ({ results, jobDetails, onUpdate
     const safeCompany = jobDetails.company.replace(/[^a-z0-9]/gi, '_');
 
     if (activeTab === 'resume') {
-        htmlContent = getThemedHtml(); // Use the themed version
+        // If editing, grab current state from DOM, otherwise use stored state
+        if (isEditing && iframeRef.current?.contentDocument) {
+             htmlContent = iframeRef.current.contentDocument.documentElement.outerHTML;
+        } else {
+             htmlContent = getThemedHtml();
+        }
         filename = `Resume_${safeCompany}.pdf`;
     } else if (activeTab === 'coverLetter') {
         filename = `CoverLetter_${safeCompany}.pdf`;
@@ -152,7 +200,7 @@ const ResultsTabs: React.FC<ResultsTabsProps> = ({ results, jobDetails, onUpdate
     switch (activeTab) {
       case 'resume':
         return (
-          <div className="w-full h-[800px] bg-slate-200 dark:bg-slate-800 overflow-hidden rounded-lg relative group border border-slate-300 dark:border-slate-700 flex flex-col">
+          <div className={`w-full h-[800px] bg-slate-200 dark:bg-slate-800 overflow-hidden rounded-lg relative group border border-slate-300 dark:border-slate-700 flex flex-col ${isEditing ? 'ring-2 ring-brand-500' : ''}`}>
              {/* Toolbar for Resume Tab */}
              <div className="absolute top-4 left-4 z-10 flex items-center space-x-2">
                  <div className="bg-white dark:bg-slate-900 rounded-lg shadow-sm border border-slate-200 dark:border-slate-700 p-1 flex items-center">
@@ -161,46 +209,45 @@ const ResultsTabs: React.FC<ResultsTabsProps> = ({ results, jobDetails, onUpdate
                         value={selectedTheme}
                         onChange={(e) => setSelectedTheme(e.target.value)}
                         className="bg-transparent text-sm font-medium text-slate-800 dark:text-slate-200 outline-none cursor-pointer p-1"
+                        disabled={isEditing}
                     >
                         {Object.entries(THEMES).map(([key, theme]) => (
                             <option key={key} value={key}>{theme.name}</option>
                         ))}
                     </select>
                  </div>
+                 {isEditing && (
+                    <div className="bg-yellow-100 text-yellow-800 text-xs px-2 py-1.5 rounded font-bold shadow-sm">
+                        ✎ Visual Editor Active
+                    </div>
+                 )}
              </div>
 
-             {isEditing ? (
-                 <div className="w-full h-full flex flex-col mt-14">
-                     <div className="bg-yellow-50 dark:bg-yellow-900/20 p-2 text-xs text-yellow-800 dark:text-yellow-200 text-center border-b border-yellow-100 dark:border-yellow-900/30">
-                         ⚠️ Editing Raw HTML. Be careful not to break the structure.
-                     </div>
-                     <textarea 
-                        className="flex-grow w-full p-4 font-mono text-xs bg-slate-900 text-slate-300 outline-none resize-none"
-                        value={results.resumeHtml}
-                        onChange={(e) => updateField('resumeHtml', e.target.value)}
-                        spellCheck={false}
-                     />
-                 </div>
-             ) : (
-                <>
-                    <iframe 
-                        srcDoc={getThemedHtml()} 
-                        title="Resume Preview" 
-                        className="w-full h-full bg-white shadow-sm"
-                    />
-                    <div className="absolute top-4 right-4">
-                        <button 
-                            onClick={handleDownloadPdf}
-                            className="flex items-center px-4 py-2 bg-slate-900 dark:bg-brand-600 text-white rounded-lg shadow-lg hover:bg-slate-800 dark:hover:bg-brand-500 transition-all"
-                        >
-                            <svg className="w-4 h-4 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
-                            </svg>
-                            Download PDF
-                        </button>
-                    </div>
-                </>
-             )}
+             {/* 
+                 We use a single iframe. 
+                 When isEditing is true, we manipulate its DOM to be contentEditable.
+                 We ONLY update the srcDoc when we are NOT editing to prevent re-renders losing focus.
+             */}
+            <iframe 
+                ref={iframeRef}
+                srcDoc={isEditing ? undefined : getThemedHtml()} 
+                title="Resume Preview" 
+                className="w-full h-full bg-white shadow-sm"
+            />
+
+            {!isEditing && (
+                <div className="absolute top-4 right-4">
+                    <button 
+                        onClick={handleDownloadPdf}
+                        className="flex items-center px-4 py-2 bg-slate-900 dark:bg-brand-600 text-white rounded-lg shadow-lg hover:bg-slate-800 dark:hover:bg-brand-500 transition-all"
+                    >
+                        <svg className="w-4 h-4 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+                        </svg>
+                        Download PDF
+                    </button>
+                </div>
+            )}
           </div>
         );
       case 'coverLetter':
@@ -408,7 +455,7 @@ const ResultsTabs: React.FC<ResultsTabsProps> = ({ results, jobDetails, onUpdate
                     />
                  </button>
                  <span className="ml-3 text-sm font-medium text-slate-900 dark:text-slate-100">
-                     {isEditing ? 'Editing' : 'Edit Mode'}
+                     {isEditing ? 'Direct Edit' : 'Edit Mode'}
                  </span>
             </div>
         )}

@@ -83,19 +83,44 @@ const ResultsTabs: React.FC<ResultsTabsProps> = ({ results, jobDetails, onUpdate
     );
   };
 
-  // Manage WYSIWYG editing inside the iframe
+  const toggleEditMode = () => {
+      const iframe = iframeRef.current;
+      
+      // If turning OFF editing (Saving)
+      if (isEditing) {
+          if (iframe && iframe.contentDocument) {
+              // Disable editing in DOM
+              iframe.contentDocument.body.contentEditable = "false";
+              const editorStyle = iframe.contentDocument.getElementById('editor-styles');
+              if (editorStyle) editorStyle.remove();
+
+              // Capture NEW content
+              console.log("Saving changes from WYSIWYG Editor...");
+              const newHtml = iframe.contentDocument.documentElement.outerHTML;
+              updateField('resumeHtml', newHtml);
+          }
+          setIsEditing(false);
+      } 
+      // If turning ON editing
+      else {
+          setIsEditing(true);
+          // Effects inside the iframe will be handled by the useEffect below to ensure style injection
+      }
+  };
+
+  // Manage WYSIWYG injection when editing state changes
   useEffect(() => {
     const iframe = iframeRef.current;
-    if (!iframe || activeTab !== 'resume') return;
+    if (!iframe || activeTab !== 'resume' || !isEditing) return;
 
-    // Wait for load if needed, or act immediately if already loaded
     const enableEditing = () => {
         if (!iframe.contentDocument || !iframe.contentDocument.body) return;
         
-        if (isEditing) {
-            iframe.contentDocument.body.contentEditable = "true";
-            iframe.contentDocument.body.style.outline = "none";
-            // Add visual cue for editing inside the iframe
+        iframe.contentDocument.body.contentEditable = "true";
+        iframe.contentDocument.body.style.outline = "none";
+        
+        // Add visual cue for editing inside the iframe if not already there
+        if (!iframe.contentDocument.getElementById('editor-styles')) {
             const style = iframe.contentDocument.createElement('style');
             style.id = "editor-styles";
             style.innerHTML = `
@@ -103,26 +128,14 @@ const ResultsTabs: React.FC<ResultsTabsProps> = ({ results, jobDetails, onUpdate
                 *[contenteditable]:focus { outline: 2px solid #3b82f6; background-color: rgba(59, 130, 246, 0.05); }
             `;
             iframe.contentDocument.head.appendChild(style);
-        } else {
-            // When turning OFF editing, save the content
-            iframe.contentDocument.body.contentEditable = "false";
-            const editorStyle = iframe.contentDocument.getElementById('editor-styles');
-            if (editorStyle) editorStyle.remove();
-            
-            // Capture the full HTML including root and head
-            const newHtml = iframe.contentDocument.documentElement.outerHTML;
-            // Clean up internal editor attributes if any (browsers usually handle this, but good to be safe)
-            updateField('resumeHtml', newHtml);
         }
     };
 
-    // If iframe is already loaded, run immediately
     if (iframe.contentDocument && iframe.contentDocument.readyState === 'complete') {
         enableEditing();
     } else {
         iframe.onload = enableEditing;
     }
-
   }, [isEditing, activeTab]);
 
 
@@ -226,11 +239,13 @@ const ResultsTabs: React.FC<ResultsTabsProps> = ({ results, jobDetails, onUpdate
              {/* 
                  We use a single iframe. 
                  When isEditing is true, we manipulate its DOM to be contentEditable.
-                 We ONLY update the srcDoc when we are NOT editing to prevent re-renders losing focus.
+                 IMPORTANT: We do NOT set srcDoc to undefined during edit mode, as that unloads the DOM.
+                 We keep it as getThemedHtml(). Since getThemedHtml() value doesn't change when we just toggle edit mode,
+                 React won't re-render the iframe, preserving the DOM we are about to edit.
              */}
             <iframe 
                 ref={iframeRef}
-                srcDoc={isEditing ? undefined : getThemedHtml()} 
+                srcDoc={getThemedHtml()} 
                 title="Resume Preview" 
                 className="w-full h-full bg-white shadow-sm"
             />
@@ -439,7 +454,7 @@ const ResultsTabs: React.FC<ResultsTabsProps> = ({ results, jobDetails, onUpdate
         {onUpdate && (
             <div className="ml-4 flex items-center">
                  <button
-                    onClick={() => setIsEditing(!isEditing)}
+                    onClick={toggleEditMode}
                     className={`
                         relative inline-flex h-8 w-14 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none
                         ${isEditing ? 'bg-brand-600' : 'bg-slate-200 dark:bg-slate-700'}

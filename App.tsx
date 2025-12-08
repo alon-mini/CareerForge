@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { AppState, AppStatus, UserProfile, JobDetails, ApplicationRecord, GeneratedAssets } from './types';
 import { generateApplicationAssets, refineResume } from './services/gemini';
 import { authService } from './services/auth';
@@ -14,7 +14,11 @@ function App() {
   const [darkMode, setDarkMode] = useState(false);
   const [activeTab, setActiveTab] = useState<'create' | 'applications'>('create');
   const [isAppSaved, setIsAppSaved] = useState(false);
+  
+  // Cinematic Loading State
+  const [generationPhase, setGenerationPhase] = useState<'idle' | 'drafting' | 'refining' | 'complete'>('idle');
   const [loadingProgress, setLoadingProgress] = useState({ message: 'Starting...', percent: 0 });
+  
   const [state, setState] = useState<AppState>({
     status: AppStatus.IDLE,
     userProfile: null,
@@ -46,6 +50,64 @@ function App() {
       localStorage.setItem('theme', 'light');
     }
   };
+
+  // Cinematic Loading Logic
+  useEffect(() => {
+    let interval: ReturnType<typeof setInterval>;
+    const draftingMessages = ["Drafting Resume...", "Writing Cover Letter...", "Designing Strategy...", "Compiling Interview Prep..."];
+    
+    if (generationPhase === 'drafting') {
+      console.log("Phase: Drafting Started");
+      setLoadingProgress({ message: "Initializing Agent...", percent: 0 });
+      let p = 0;
+      let ticks = 0;
+      interval = setInterval(() => {
+        ticks++;
+        // Creep to 67% over 60 seconds (600 ticks)
+        if (p < 67) {
+          p += (67 / 600); // approximate increments
+          // Ensure we don't overshoot if laggy
+          if (p > 67) p = 67;
+        }
+        
+        // Cycle messages every 12 seconds (120 ticks) and don't loop/overflow
+        const msgIndex = Math.min(Math.floor(ticks / 120), draftingMessages.length - 1);
+        
+        setLoadingProgress({ 
+          message: draftingMessages[msgIndex], 
+          percent: Math.floor(p) 
+        });
+      }, 100);
+
+    } else if (generationPhase === 'refining') {
+      console.log("Phase: Refining Started");
+      setLoadingProgress({ message: "Judge Agent Reviewing...", percent: 67 });
+      let p = 67;
+      interval = setInterval(() => {
+        // Creep to 99% over 45 seconds (450 ticks)
+        if (p < 99) {
+          p += (32 / 450);
+          if (p > 99) p = 99;
+        }
+        
+        let msg = "Surgically Refining HTML...";
+        if (p > 85) msg = "Final Polish...";
+        else if (p > 75) msg = "Checking Job Alignment...";
+
+        setLoadingProgress({ 
+          message: msg, 
+          percent: Math.floor(p) 
+        });
+      }, 100);
+
+    } else if (generationPhase === 'complete') {
+      console.log("Phase: Complete");
+      setLoadingProgress({ message: "Finalizing...", percent: 100 });
+    }
+
+    return () => clearInterval(interval);
+  }, [generationPhase]);
+
 
   // Check for stored API Key and Profile on mount
   useEffect(() => {
@@ -123,31 +185,33 @@ function App() {
       return;
     }
 
+    // Start Phase 1
     setState(prev => ({ ...prev, status: AppStatus.PROCESSING, error: null }));
+    setGenerationPhase('drafting');
     setIsAppSaved(false);
-    setLoadingProgress({ message: 'Initializing...', percent: 0 });
-
-    const updateProgress = (message: string, percent: number) => {
-      setLoadingProgress({ message, percent });
-    };
 
     try {
+      console.log("Starting Generation...");
+      
       // Step 1: Initial Generation
       const results = await generateApplicationAssets(
         state.userProfile, 
         state.jobDetails, 
-        apiKey,
-        updateProgress
+        apiKey
       );
       
+      console.log("Draft Generated. Starting Refinement...");
+
+      // Start Phase 2
+      setGenerationPhase('refining');
+
       // Step 2: Surgical Refinement (LLM as a Judge)
       // We pass the initially generated HTML to a second AI call to fix cut-offs and enforce alignment.
       const refinedHtml = await refineResume(
           results.resumeHtml, 
           state.jobDetails, 
           state.userProfile, 
-          apiKey,
-          updateProgress
+          apiKey
       );
 
       // Update the results with the refined HTML
@@ -156,7 +220,10 @@ function App() {
           resumeHtml: refinedHtml
       };
 
-      setLoadingProgress({ message: 'Done!', percent: 100 });
+      // Finish
+      setGenerationPhase('complete');
+      console.log("Process Complete.");
+
       // Small delay to let the user see 100%
       setTimeout(() => {
         setState(prev => ({
@@ -164,18 +231,22 @@ function App() {
             status: AppStatus.COMPLETE,
             results: finalResults
         }));
-      }, 500);
+        setGenerationPhase('idle');
+      }, 800);
 
     } catch (err) {
+      console.error("App Error:", err);
       setState(prev => ({
         ...prev,
         status: AppStatus.ERROR,
         error: err instanceof Error ? err.message : "An unknown error occurred."
       }));
+      setGenerationPhase('idle');
     }
   };
 
   const handleAssetsUpdate = (updatedAssets: GeneratedAssets) => {
+    console.log("Asset Update Triggered", updatedAssets);
     setState(prev => ({
       ...prev,
       results: updatedAssets

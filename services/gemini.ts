@@ -48,8 +48,7 @@ const responseSchema: Schema = {
 export const generateApplicationAssets = async (
   profile: UserProfile,
   job: JobDetails,
-  apiKey: string,
-  onProgress?: (message: string, percentage: number) => void
+  apiKey: string
 ): Promise<GeneratedAssets> => {
   if (!apiKey) {
     throw new Error("API Key is missing. Please log in again.");
@@ -57,7 +56,7 @@ export const generateApplicationAssets = async (
 
   const ai = new GoogleGenAI({ apiKey });
 
-  if (onProgress) onProgress("Initializing AI Agent...", 5);
+  console.log("Gemini: Generating Draft...");
 
   const prompt = `
     You are an expert executive career coach and professional resume writer.
@@ -128,7 +127,7 @@ export const generateApplicationAssets = async (
 
     ### 5. Outreach Email Kit
     - **LinkedIn Note**: A short, non-spammy connection request (<300 characters).
-    - **Follow-up Email**: A classy "Thank You" email to send 24 hours after the interview.
+    - **Follow-up Email**: A professional post-interview thank you email.
 
     ---
     **Candidate Profile (Markdown):**
@@ -143,8 +142,6 @@ export const generateApplicationAssets = async (
   `;
 
   try {
-    if (onProgress) onProgress("Drafting assets (this takes ~15s)...", 15);
-    
     const response = await ai.models.generateContent({
       model: MODEL_NAME,
       contents: prompt,
@@ -155,14 +152,13 @@ export const generateApplicationAssets = async (
       },
     });
 
-    if (onProgress) onProgress("Parsing AI response...", 45);
-
     const text = response.text;
     if (!text) {
       throw new Error("No response received from Gemini.");
     }
 
     const parsed = JSON.parse(text) as GeneratedAssets;
+    console.log("Gemini: Draft Complete");
     return parsed;
   } catch (error) {
     console.error("Gemini API Error:", error);
@@ -179,14 +175,12 @@ export const refineResume = async (
     currentHtml: string,
     job: JobDetails,
     profile: UserProfile,
-    apiKey: string,
-    onProgress?: (message: string, percentage: number) => void
+    apiKey: string
 ): Promise<string> => {
     if (!apiKey) throw new Error("API Key missing");
 
     const ai = new GoogleGenAI({ apiKey });
-
-    if (onProgress) onProgress("Starting QA Audit...", 50);
+    console.log("Gemini: Starting Surgical Refinement...");
 
     const prompt = `
         You are a Senior Technical Recruiter and Quality Assurance Specialist acting as a "Judge" for a resume application.
@@ -220,8 +214,6 @@ export const refineResume = async (
     `;
 
     try {
-        if (onProgress) onProgress("Judge is reviewing formatting & keywords...", 65);
-
         const response = await ai.models.generateContent({
             model: MODEL_NAME, // Using the smartest model for the "Judge" role
             contents: prompt,
@@ -230,14 +222,21 @@ export const refineResume = async (
             }
         });
 
-        if (onProgress) onProgress("Applying surgical fixes...", 85);
-
         let cleanedHtml = response.text || "";
         
-        // Cleanup if the model wraps it in markdown despite instructions
-        cleanedHtml = cleanedHtml.replace(/^```html/, '').replace(/```$/, '').trim();
+        // STRICT CLEANUP: Extract only the HTML part if the model chatted
+        // This regex looks for <html...</html> or <!DOCTYPE...</html>
+        const htmlMatch = cleanedHtml.match(/(?:<!DOCTYPE html>|<html)[\s\S]*<\/html>/i);
         
-        if (onProgress) onProgress("Finalizing document...", 95);
+        if (htmlMatch) {
+            console.log("Gemini: Extracted valid HTML from response.");
+            cleanedHtml = htmlMatch[0];
+        } else {
+             // Fallback cleanup if regex fails but markdown blocks exist
+             cleanedHtml = cleanedHtml.replace(/^```html/, '').replace(/```$/, '').trim();
+        }
+
+        console.log("Gemini: Refinement Complete");
         return cleanedHtml;
 
     } catch (error) {

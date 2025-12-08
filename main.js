@@ -19,6 +19,14 @@ function createWindow() {
   win.loadFile(path.join(__dirname, 'dist', 'index.html'));
   win.setMenuBarVisibility(false);
 
+  // F12 Developer Tools Handler
+  win.webContents.on('before-input-event', (event, input) => {
+    if (input.key === 'F12' && input.type === 'keyDown') {
+      win.webContents.toggleDevTools();
+      event.preventDefault();
+    }
+  });
+
   // Only show window when content is ready
   win.once('ready-to-show', () => {
     win.show();

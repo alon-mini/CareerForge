@@ -9,12 +9,13 @@ CareerForge is a powerful, desktop-based tool designed to supercharge your job s
 *   **Tailored Resumes**: Generates a one-page, A4-formatted HTML resume optimized for the specific role.
 *   **Resume Skins**: Instantly transform the look of your resume with multiple professional themes (Modern Blue, Executive Serif, Tech Minimalist) without regenerating content.
 *   **Surgical AI Refinement**: Uses a dual-stage AI process. First, a "Writer" agent drafts the content. Then, a "Judge" agent reviews the HTML to fix formatting errors, ensure strict one-page fit, and verify facts.
-*   **Full In-App Editing**: Don't like a phrase? Switch to "Edit Mode" to tweak cover letters, interview answers, or even the raw HTML of your resume directly within the app.
+*   **Visual In-App Editing (WYSIWYG)**: Don't like a phrase? Toggle "Edit Mode" and simply click and type directly onto the resume preview to make changes. No coding required.
 *   **Human-Centric Cover Letters**: Writes authentic, non-robotic cover letters that connect your past wins to future challenges.
 *   **Strategy & Interview Prep**: Provides a narrative strategy ("The Story") and generates 5 tough, role-specific interview questions with answer guides.
 *   **Interactive Application Tracker**: Manage your pipeline from "Applied" to "Offer". Track stages, add custom steps (e.g., "Home Assignment"), and visualize your progress.
 *   **Persistent & Safe Data**: Your profile, API key, and application history are stored securely in your operating system's standard application data folder (`%APPDATA%`).
 *   **PDF Generation**: Native PDF export for Resumes and Cover Letters.
+*   **Developer Mode**: Press `F12` at any time to open the debug console and view internal logs and AI progress.
 
 ## 🛠 Prerequisites
 
@@ -69,7 +70,7 @@ Your "Source of Truth" is a `.md` (Markdown) or `.txt` file containing your enti
 ### 4. Review, Edit & Export
 Once generation is complete:
 *   **Resume Skins**: In the Resume tab, use the "Skin" dropdown to choose a style that fits the company culture.
-*   **Edit Mode**: Toggle "Edit Mode" in the top right corner to make manual changes to any text. For the resume, this opens a raw code editor for precise HTML control.
+*   **Edit Mode**: Toggle "Edit Mode" in the top right corner. The resume preview becomes interactive—click anywhere to type fixes. Toggle it off to save your changes.
 *   **Export**: Click **"Download PDF"** to save your documents.
 
 ### 5. Tracking Your Application

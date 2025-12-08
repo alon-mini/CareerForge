@@ -1,8 +1,12 @@
 
 import React, { useEffect, useState } from 'react';
-import { ApplicationRecord, RecruitmentStage, ApplicationStatus } from '../types';
+import { ApplicationRecord, RecruitmentStage, ApplicationStatus, GeneratedAssets } from '../types';
 import { fileSystemService } from '../services/fileSystem';
 import ResultsTabs from './ResultsTabs';
+
+interface ApplicationHistoryProps {
+  onGenerateMissing: (recordId: string, assetType: keyof GeneratedAssets, recordContext: ApplicationRecord) => Promise<any>;
+}
 
 const STATUS_CONFIG: Record<ApplicationStatus, { label: string, color: string, bg: string, border: string }> = {
   active: { label: 'In Progress', color: 'text-brand-600 dark:text-brand-400', bg: 'bg-brand-50 dark:bg-brand-900/20', border: 'border-brand-200 dark:border-brand-800' },
@@ -11,11 +15,12 @@ const STATUS_CONFIG: Record<ApplicationStatus, { label: string, color: string, b
   ghosted: { label: 'No Response', color: 'text-slate-500 dark:text-slate-400', bg: 'bg-slate-50 dark:bg-slate-800/50', border: 'border-slate-200 dark:border-slate-700' }
 };
 
-const ApplicationHistory: React.FC = () => {
+const ApplicationHistory: React.FC<ApplicationHistoryProps> = ({ onGenerateMissing }) => {
   const [history, setHistory] = useState<ApplicationRecord[]>([]);
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [newStageName, setNewStageName] = useState<string>('');
   const [addingStageTo, setAddingStageTo] = useState<string | null>(null);
+  const [tabOverrides, setTabOverrides] = useState<Record<string, string>>({});
   
   useEffect(() => {
     const records = fileSystemService.loadApplicationHistory();
@@ -79,6 +84,42 @@ const ApplicationHistory: React.FC = () => {
      setNewStageName('');
      setAddingStageTo(null);
   }
+
+  // Map asset keys to ResultTabs keys
+  const getTabIdFromAsset = (asset: keyof GeneratedAssets): string => {
+      switch(asset) {
+          case 'resumeHtml': return 'resume';
+          case 'coverLetter': return 'coverLetter';
+          case 'strategyStory': return 'story';
+          case 'interviewPrep': return 'interview';
+          case 'emailKit': return 'outreach';
+          default: return 'resume';
+      }
+  }
+
+  // Wraps the API generation call to update local history state immediately upon success
+  const handleGenerateInHistory = async (record: ApplicationRecord, assetType: keyof GeneratedAssets) => {
+      try {
+          const result = await onGenerateMissing(record.id, assetType, record);
+          // Result comes back raw, but state is also updated in parent via filesystem.
+          // To make UI snappy, we update local state too.
+          const updatedAssets = { ...record.assets, [assetType]: result };
+          const updatedRecord = { ...record, assets: updatedAssets };
+          updateRecord(updatedRecord);
+
+          // Force switch to the new tab for this record
+          const tabId = getTabIdFromAsset(assetType);
+          setTabOverrides(prev => ({ ...prev, [record.id]: tabId }));
+          
+      } catch (e) {
+          // Error handling done in parent (App.tsx)
+      }
+  };
+
+  const handleAssetsUpdate = (record: ApplicationRecord, newAssets: GeneratedAssets) => {
+      const updatedRecord = { ...record, assets: newAssets };
+      updateRecord(updatedRecord);
+  };
 
   if (history.length === 0) {
     return (
@@ -302,6 +343,9 @@ const ApplicationHistory: React.FC = () => {
                     <ResultsTabs 
                         results={app.assets} 
                         jobDetails={{ title: app.title, company: app.company }} 
+                        onUpdate={(newAssets) => handleAssetsUpdate(app, newAssets)}
+                        onGenerateMissing={(assetType) => handleGenerateInHistory(app, assetType)}
+                        requestedTab={tabOverrides[app.id]}
                     />
                   </div>
                 </div>

@@ -1,3 +1,4 @@
+
 import React, { useState, useRef, useEffect } from 'react';
 import { GeneratedAssets, JobDetails, InterviewQuestion } from '../types';
 
@@ -5,6 +6,8 @@ interface ResultsTabsProps {
   results: GeneratedAssets;
   jobDetails: { title: string; company: string };
   onUpdate?: (updatedAssets: GeneratedAssets) => void;
+  onGenerateMissing?: (assetType: keyof GeneratedAssets) => void;
+  requestedTab?: string | null;
 }
 
 const THEMES: Record<string, { name: string; css: string }> = {
@@ -49,12 +52,19 @@ const THEMES: Record<string, { name: string; css: string }> = {
   }
 };
 
-const ResultsTabs: React.FC<ResultsTabsProps> = ({ results, jobDetails, onUpdate }) => {
+const ResultsTabs: React.FC<ResultsTabsProps> = ({ results, jobDetails, onUpdate, onGenerateMissing, requestedTab }) => {
   const [activeTab, setActiveTab] = useState<'resume' | 'coverLetter' | 'story' | 'interview' | 'outreach'>('resume');
   const [copyFeedback, setCopyFeedback] = useState<string | null>(null);
   const [isEditing, setIsEditing] = useState(false);
   const [selectedTheme, setSelectedTheme] = useState<string>('original');
   const iframeRef = useRef<HTMLIFrameElement>(null);
+
+  // Switch tab when requested by parent
+  useEffect(() => {
+    if (requestedTab) {
+        setActiveTab(requestedTab as any);
+    }
+  }, [requestedTab]);
 
   const handleCopy = (text: string) => {
     navigator.clipboard.writeText(text);
@@ -209,6 +219,27 @@ const ResultsTabs: React.FC<ResultsTabsProps> = ({ results, jobDetails, onUpdate
     { id: 'outreach', label: 'Outreach' }
   ];
 
+  const MissingContentPlaceholder = ({ label, assetKey }: { label: string, assetKey: keyof GeneratedAssets }) => (
+      <div className="flex flex-col items-center justify-center h-96 border-2 border-dashed border-slate-200 dark:border-slate-800 rounded-xl bg-slate-50/50 dark:bg-slate-900/50">
+          <p className="text-slate-500 dark:text-slate-400 mb-4 text-center max-w-sm">
+              You chose not to generate the <strong>{label}</strong> during the initial forge.
+          </p>
+          {onGenerateMissing ? (
+              <button 
+                onClick={() => onGenerateMissing(assetKey)}
+                className="px-4 py-2 bg-brand-600 hover:bg-brand-700 text-white rounded-lg shadow-sm text-sm font-semibold transition-colors flex items-center gap-2"
+              >
+                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19.428 15.428a2 2 0 00-1.022-.547l-2.387-.477a6 6 0 00-3.86.517l-.318.158a6 6 0 01-3.86.517L6.05 15.21a2 2 0 00-1.806.547M8 4h8l-1 1v5.172a2 2 0 00.586 1.414l5 5c1.26 1.26.367 3.414-1.415 3.414H4.828c-1.782 0-2.674-2.154-1.414-3.414l5-5A2 2 0 009 10.172V5L8 4z" />
+                </svg>
+                Generate {label} Now
+              </button>
+          ) : (
+              <p className="text-xs text-slate-400">Generation unavailable in this view.</p>
+          )}
+      </div>
+  );
+
   const renderContent = () => {
     switch (activeTab) {
       case 'resume':
@@ -266,6 +297,7 @@ const ResultsTabs: React.FC<ResultsTabsProps> = ({ results, jobDetails, onUpdate
           </div>
         );
       case 'coverLetter':
+        if (!results.coverLetter) return <MissingContentPlaceholder label="Cover Letter" assetKey="coverLetter" />;
         return isEditing ? (
             <textarea
                 className="w-full h-[600px] p-8 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-200 font-serif leading-relaxed outline-none focus:ring-2 focus:ring-brand-500 resize-none"
@@ -276,7 +308,7 @@ const ResultsTabs: React.FC<ResultsTabsProps> = ({ results, jobDetails, onUpdate
           <div className="bg-white dark:bg-slate-900 p-12 rounded-lg shadow-sm border border-slate-200 dark:border-slate-800 min-h-[600px] whitespace-pre-wrap font-serif leading-relaxed text-slate-800 dark:text-slate-200 relative">
              <div className="absolute top-4 right-4 flex space-x-2">
                 <button 
-                   onClick={() => handleCopy(results.coverLetter)}
+                   onClick={() => handleCopy(results.coverLetter!)}
                    className="p-2 text-slate-400 hover:text-brand-600 dark:hover:text-brand-400 transition-colors"
                    title="Copy Text"
                 >
@@ -295,6 +327,7 @@ const ResultsTabs: React.FC<ResultsTabsProps> = ({ results, jobDetails, onUpdate
           </div>
         );
       case 'story':
+        if (!results.strategyStory) return <MissingContentPlaceholder label="Strategy" assetKey="strategyStory" />;
         return (
             <div className="space-y-6">
                 <div className="bg-indigo-50 dark:bg-indigo-900/20 border border-indigo-100 dark:border-indigo-800 p-6 rounded-xl">
@@ -314,6 +347,7 @@ const ResultsTabs: React.FC<ResultsTabsProps> = ({ results, jobDetails, onUpdate
             </div>
         );
       case 'interview':
+        if (!results.interviewPrep) return <MissingContentPlaceholder label="Interview Prep" assetKey="interviewPrep" />;
         return (
             <div className="space-y-6">
                 {results.interviewPrep.map((item, idx) => (
@@ -331,7 +365,7 @@ const ResultsTabs: React.FC<ResultsTabsProps> = ({ results, jobDetails, onUpdate
                                                 className="w-full p-2 rounded bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white"
                                                 value={item.question}
                                                 onChange={(e) => {
-                                                    const newPrep = [...results.interviewPrep];
+                                                    const newPrep = [...(results.interviewPrep || [])];
                                                     newPrep[idx] = { ...newPrep[idx], question: e.target.value };
                                                     updateField('interviewPrep', newPrep);
                                                 }}
@@ -343,7 +377,7 @@ const ResultsTabs: React.FC<ResultsTabsProps> = ({ results, jobDetails, onUpdate
                                                 className="w-full p-2 rounded bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-500 dark:text-slate-400 text-sm"
                                                 value={item.context}
                                                 onChange={(e) => {
-                                                    const newPrep = [...results.interviewPrep];
+                                                    const newPrep = [...(results.interviewPrep || [])];
                                                     newPrep[idx] = { ...newPrep[idx], context: e.target.value };
                                                     updateField('interviewPrep', newPrep);
                                                 }}
@@ -364,7 +398,7 @@ const ResultsTabs: React.FC<ResultsTabsProps> = ({ results, jobDetails, onUpdate
                                             className="w-full h-24 p-2 bg-transparent border border-slate-200 dark:border-slate-600 rounded text-slate-600 dark:text-slate-300 text-sm"
                                             value={item.suggestedAnswer}
                                             onChange={(e) => {
-                                                const newPrep = [...results.interviewPrep];
+                                                const newPrep = [...(results.interviewPrep || [])];
                                                 newPrep[idx] = { ...newPrep[idx], suggestedAnswer: e.target.value };
                                                 updateField('interviewPrep', newPrep);
                                             }}
@@ -382,39 +416,40 @@ const ResultsTabs: React.FC<ResultsTabsProps> = ({ results, jobDetails, onUpdate
             </div>
         );
       case 'outreach':
+        if (!results.emailKit) return <MissingContentPlaceholder label="Outreach Kit" assetKey="emailKit" />;
         return (
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-6 shadow-sm flex flex-col">
                     <div className="flex items-center justify-between mb-4">
                         <h3 className="font-bold text-slate-900 dark:text-white">LinkedIn Connect</h3>
-                        {!isEditing && <button onClick={() => handleCopy(results.emailKit.linkedInConnection)} className="text-brand-600 dark:text-brand-400 text-sm hover:underline">Copy</button>}
+                        {!isEditing && <button onClick={() => handleCopy(results.emailKit!.linkedInConnection)} className="text-brand-600 dark:text-brand-400 text-sm hover:underline">Copy</button>}
                     </div>
                     {isEditing ? (
                         <textarea 
                             className="flex-grow p-4 rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-600 dark:text-slate-300 text-sm resize-none"
-                            value={results.emailKit.linkedInConnection}
-                            onChange={(e) => updateField('emailKit', { ...results.emailKit, linkedInConnection: e.target.value })}
+                            value={results.emailKit!.linkedInConnection}
+                            onChange={(e) => updateField('emailKit', { ...results.emailKit!, linkedInConnection: e.target.value })}
                         />
                     ) : (
                         <div className="bg-slate-50 dark:bg-slate-800 p-4 rounded-lg border border-slate-100 dark:border-slate-700 text-sm text-slate-600 dark:text-slate-300 italic flex-grow whitespace-pre-wrap">
-                            {results.emailKit.linkedInConnection}
+                            {results.emailKit!.linkedInConnection}
                         </div>
                     )}
                 </div>
                 <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-6 shadow-sm flex flex-col">
                     <div className="flex items-center justify-between mb-4">
                         <h3 className="font-bold text-slate-900 dark:text-white">Post-Interview Thank You</h3>
-                        {!isEditing && <button onClick={() => handleCopy(results.emailKit.followUpEmail)} className="text-brand-600 dark:text-brand-400 text-sm hover:underline">Copy</button>}
+                        {!isEditing && <button onClick={() => handleCopy(results.emailKit!.followUpEmail)} className="text-brand-600 dark:text-brand-400 text-sm hover:underline">Copy</button>}
                     </div>
                     {isEditing ? (
                         <textarea 
                             className="flex-grow p-4 rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-600 dark:text-slate-300 text-sm resize-none"
-                            value={results.emailKit.followUpEmail}
-                            onChange={(e) => updateField('emailKit', { ...results.emailKit, followUpEmail: e.target.value })}
+                            value={results.emailKit!.followUpEmail}
+                            onChange={(e) => updateField('emailKit', { ...results.emailKit!, followUpEmail: e.target.value })}
                         />
                     ) : (
                         <div className="bg-slate-50 dark:bg-slate-800 p-4 rounded-lg border border-slate-100 dark:border-slate-700 text-sm text-slate-600 dark:text-slate-300 italic flex-grow whitespace-pre-wrap">
-                            {results.emailKit.followUpEmail}
+                            {results.emailKit!.followUpEmail}
                         </div>
                     )}
                 </div>

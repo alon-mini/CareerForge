@@ -1,54 +1,58 @@
+
 import { GoogleGenAI, Type, Schema } from "@google/genai";
-import { UserProfile, JobDetails, GeneratedAssets } from "../types";
+import { UserProfile, JobDetails, GeneratedAssets, GenerationOptions } from "../types";
 
-// We use gemini-3-pro-preview for complex reasoning and content generation tasks
-const MODEL_NAME = 'gemini-3-pro-preview';
+// We use gemini-3-pro-preview for complex reasoning and content generation tasks (Creative Writer)
+const GENERATOR_MODEL = 'gemini-3-pro-preview';
 
-const responseSchema: Schema = {
+// We use gemini-2.5-flash for the "Judge" phase for maximum stability (no 503s) and speed
+const JUDGE_MODEL = 'gemini-2.5-flash';
+
+// Definitions for schema parts
+const resumeSchemaPart = {
+  type: Type.STRING,
+  description: "A complete, stand-alone HTML document string for the tailored resume. It MUST be designed to fit exactly on one A4 page. It must include internal CSS for professional styling, layout (columns/grids), and print optimization."
+};
+
+const coverLetterSchemaPart = {
+  type: Type.STRING,
+  description: "The text content of a professional cover letter tailored to the job. Plain text only, no markdown."
+};
+
+const strategySchemaPart = {
+  type: Type.STRING,
+  description: "A strategic narrative for the candidate. Plain text only, no markdown."
+};
+
+const interviewSchemaPart = {
+  type: Type.ARRAY,
+  description: "A list of 5 interview questions tailored to the specific gaps or strengths of this candidate for this specific job.",
+  items: {
+    type: Type.OBJECT,
+    properties: {
+      question: { type: Type.STRING },
+      context: { type: Type.STRING, description: "Why the interviewer is asking this." },
+      suggestedAnswer: { type: Type.STRING, description: "Key points the candidate should mention in their answer." }
+    },
+    required: ["question", "context", "suggestedAnswer"]
+  }
+};
+
+const outreachSchemaPart = {
   type: Type.OBJECT,
+  description: "Templates for communication.",
   properties: {
-    resumeHtml: {
-      type: Type.STRING,
-      description: "A complete, stand-alone HTML document string for the tailored resume. It MUST be designed to fit exactly on one A4 page. It must include internal CSS for professional styling, layout (columns/grids), and print optimization."
-    },
-    coverLetter: {
-      type: Type.STRING,
-      description: "The text content of a professional cover letter tailored to the job. Plain text only, no markdown."
-    },
-    strategyStory: {
-      type: Type.STRING,
-      description: "A strategic narrative for the candidate. Plain text only, no markdown."
-    },
-    interviewPrep: {
-      type: Type.ARRAY,
-      description: "A list of 5 interview questions tailored to the specific gaps or strengths of this candidate for this specific job.",
-      items: {
-        type: Type.OBJECT,
-        properties: {
-          question: { type: Type.STRING },
-          context: { type: Type.STRING, description: "Why the interviewer is asking this." },
-          suggestedAnswer: { type: Type.STRING, description: "Key points the candidate should mention in their answer." }
-        },
-        required: ["question", "context", "suggestedAnswer"]
-      }
-    },
-    emailKit: {
-      type: Type.OBJECT,
-      description: "Templates for communication.",
-      properties: {
-        linkedInConnection: { type: Type.STRING, description: "A short (<300 chars) connection note to a hiring manager." },
-        followUpEmail: { type: Type.STRING, description: "A professional post-interview thank you email." }
-      },
-      required: ["linkedInConnection", "followUpEmail"]
-    }
+    linkedInConnection: { type: Type.STRING, description: "A short (<300 chars) connection note to a hiring manager." },
+    followUpEmail: { type: Type.STRING, description: "A professional post-interview thank you email." }
   },
-  required: ["resumeHtml", "coverLetter", "strategyStory", "interviewPrep", "emailKit"]
+  required: ["linkedInConnection", "followUpEmail"]
 };
 
 export const generateApplicationAssets = async (
   profile: UserProfile,
   job: JobDetails,
-  apiKey: string
+  apiKey: string,
+  options: GenerationOptions
 ): Promise<GeneratedAssets> => {
   if (!apiKey) {
     throw new Error("API Key is missing. Please log in again.");
@@ -56,7 +60,36 @@ export const generateApplicationAssets = async (
 
   const ai = new GoogleGenAI({ apiKey });
 
-  console.log("Gemini: Generating Draft...");
+  console.log(`Gemini: Generating Draft using ${GENERATOR_MODEL}...`);
+
+  // Dynamically build Schema Properties
+  const properties: Record<string, any> = {
+    resumeHtml: resumeSchemaPart // Resume is always mandatory
+  };
+  const requiredFields = ["resumeHtml"];
+
+  if (options.coverLetter) {
+    properties.coverLetter = coverLetterSchemaPart;
+    requiredFields.push("coverLetter");
+  }
+  if (options.strategy) {
+    properties.strategyStory = strategySchemaPart;
+    requiredFields.push("strategyStory");
+  }
+  if (options.interviewPrep) {
+    properties.interviewPrep = interviewSchemaPart;
+    requiredFields.push("interviewPrep");
+  }
+  if (options.outreach) {
+    properties.emailKit = outreachSchemaPart;
+    requiredFields.push("emailKit");
+  }
+
+  const dynamicSchema: Schema = {
+    type: Type.OBJECT,
+    properties: properties,
+    required: requiredFields
+  };
 
   const prompt = `
     You are an expert executive career coach and professional resume writer.
@@ -97,37 +130,24 @@ export const generateApplicationAssets = async (
       - Headings: 12pt to 16pt.
       - Line-height: 1.2 to 1.3 (Tight).
     - **Layout**: Use a 2-column layout (Sidebar approx 30%, Main 70%) to make efficient use of vertical space.
+    - **NO MARKDOWN**: Do NOT use markdown syntax (like **bold** or *italics*) inside the HTML. Use valid HTML tags only (<strong>, <em>).
     
-    ### 2. The Cover Letter
+    ${options.coverLetter ? `### 2. The Cover Letter
     - **Tone**: Conversational, authentic, direct, and human. 
     - **AVOID AI CLICHÉS**: Do NOT use words like "thrilled," "delighted," "tapestry," "uniquely positioned," "seamless," "realm," or "beacon."
-    - **Style**: Write as if a senior professional is emailing a peer. Be confident but grounded.
-    - **FORMATTING STRICTLY PLAIN TEXT**: 
-        - Do NOT use Markdown formatting (NO bold \`**text**\`, NO italics \`_text_\`).
-        - Do NOT use em-dashes (—). Use a simple hyphen (-) or a comma instead.
-    - **Structure**:
-      - Hook: Don't start with "I am writing to apply." Start with a strong statement about the field or the company's recent work.
-      - Middle: Connect specific past wins (using numbers) to the future problems this role needs to solve.
-      - Close: Short and actionable.
+    - **Structure**: Hook, Middle (Wins vs Problems), Close.` : ''}
     
-    ### 3. The Strategy Story
+    ${options.strategy ? `### 3. The Strategy Story
     - A guide for the candidate on how to present themselves. 
-    - Explain the "bridge" between their past and this new role. 
-    - Provide 3 key "Power Stories" to tell in the interview (STAR method).
-    - **FORMATTING STRICTLY PLAIN TEXT**: 
-        - Do NOT use Markdown formatting (NO bold \`**\`, NO headers \`#\`).
-        - Do NOT use em-dashes (—). Use standard punctuation.
-        - Use simple line breaks for paragraphs.
+    - Provide 3 key "Power Stories" to tell in the interview (STAR method).` : ''}
 
-    ### 4. Interview Prep (5 Questions)
-    - Generate 5 tough questions that this specific hiring manager might ask this specific candidate.
-    - Mix of Behavioral ("Tell me about a time...") and Technical/Strategic.
-    - Include the "Why": Why are they asking this?
-    - Include the "Answer": Bullet points on what specific experience the candidate should cite.
+    ${options.interviewPrep ? `### 4. Interview Prep (5 Questions)
+    - Generate 5 tough questions that this specific hiring manager might ask.
+    - Include the "Why" and the "Suggested Answer".` : ''}
 
-    ### 5. Outreach Email Kit
-    - **LinkedIn Note**: A short, non-spammy connection request (<300 characters).
-    - **Follow-up Email**: A professional post-interview thank you email.
+    ${options.outreach ? `### 5. Outreach Email Kit
+    - LinkedIn Connection Note (<300 chars)
+    - Follow-up Email` : ''}
 
     ---
     **Candidate Profile (Markdown):**
@@ -143,12 +163,12 @@ export const generateApplicationAssets = async (
 
   try {
     const response = await ai.models.generateContent({
-      model: MODEL_NAME,
+      model: GENERATOR_MODEL,
       contents: prompt,
       config: {
         responseMimeType: "application/json",
-        responseSchema: responseSchema,
-        systemInstruction: "You are a world-class career strategist. You prioritize concise, high-impact communication. You NEVER produce a resume longer than 1 page. You write cover letters that sound like real humans, not robots. You never use Markdown syntax in plain text fields.",
+        responseSchema: dynamicSchema,
+        systemInstruction: "You are a world-class career strategist. You prioritize concise, high-impact communication. You NEVER produce a resume longer than 1 page. You write cover letters that sound like real humans, not robots. You never use Markdown syntax in plain text fields. You never use Markdown syntax inside HTML code.",
       },
     });
 
@@ -167,9 +187,71 @@ export const generateApplicationAssets = async (
 };
 
 /**
+ * Generates a specific missing asset (e.g. Cover Letter) for an existing application.
+ */
+export const generateSingleAsset = async (
+    assetType: 'coverLetter' | 'strategyStory' | 'interviewPrep' | 'emailKit',
+    profile: UserProfile,
+    job: JobDetails,
+    apiKey: string
+): Promise<any> => {
+    if (!apiKey) throw new Error("API Key missing");
+    const ai = new GoogleGenAI({ apiKey });
+
+    let schema: any;
+    let instruction = "";
+
+    switch(assetType) {
+        case 'coverLetter':
+            schema = coverLetterSchemaPart;
+            instruction = "Write a professional, human-sounding cover letter. No AI cliches. Plain text. No Markdown.";
+            break;
+        case 'strategyStory':
+            schema = strategySchemaPart;
+            instruction = "Write a strategic narrative and 3 power stories (STAR method). Plain text. No Markdown.";
+            break;
+        case 'interviewPrep':
+            schema = interviewSchemaPart;
+            instruction = "Generate 5 tough interview questions with context and suggested answers.";
+            break;
+        case 'emailKit':
+            schema = outreachSchemaPart;
+            instruction = "Write a LinkedIn connection note (<300 chars) and a post-interview thank you email.";
+            break;
+    }
+
+    const prompt = `
+        Based on the profile and job description below, generate the requested asset: ${assetType}.
+        
+        **Profile:** ${profile.content}
+        **Job:** ${job.title} at ${job.company}
+        **Description:** ${job.description}
+    `;
+
+    try {
+        const response = await ai.models.generateContent({
+            model: GENERATOR_MODEL,
+            contents: prompt,
+            config: {
+                responseMimeType: "application/json",
+                responseSchema: schema,
+                systemInstruction: instruction
+            }
+        });
+        
+        // Safe JSON parsing with markdown cleanup
+        let cleanedJson = response.text || "";
+        cleanedJson = cleanedJson.replace(/^```json/, '').replace(/```$/, '').trim();
+        
+        return JSON.parse(cleanedJson);
+    } catch (error) {
+        console.error("Single Asset Generation Error:", error);
+        throw error;
+    }
+}
+
+/**
  * "LLM as a Judge" - Surgical Refinement Step
- * This function takes the already generated resume HTML and runs it through a second pass
- * to fix specific errors, cut-offs, or alignment issues.
  */
 export const refineResume = async (
     currentHtml: string,
@@ -180,7 +262,7 @@ export const refineResume = async (
     if (!apiKey) throw new Error("API Key missing");
 
     const ai = new GoogleGenAI({ apiKey });
-    console.log("Gemini: Starting Surgical Refinement...");
+    console.log(`Gemini: Starting Surgical Refinement using ${JUDGE_MODEL}...`);
 
     const prompt = `
         You are a Senior Technical Recruiter and Quality Assurance Specialist acting as a "Judge" for a resume application.
@@ -197,6 +279,7 @@ export const refineResume = async (
         2. **Keyword Injection**: The Draft might have missed specific hard skills mentioned in the JD. Surgically replace generic terms with specific keywords from the JD where truthful.
         3. **Formatting**: Ensure the layout is preserved. Ensure strict one-page fit (A4). 
         4. **Hallucination Check**: Ensure the Draft didn't invent experience not present in the Master Profile.
+        5. **Markdown Scrubbing**: Scan for and REMOVE any markdown syntax like **bold** or *italics* or ### headers inside the HTML. Replace them with valid HTML tags (<strong>, <em>, <h3>) or remove them if they break the code.
         
         **OUTPUT:**
         Return ONLY the corrected, valid, full HTML string. Do not wrap it in markdown code blocks. Do not add explanations. Just the code.
@@ -215,17 +298,16 @@ export const refineResume = async (
 
     try {
         const response = await ai.models.generateContent({
-            model: MODEL_NAME, // Using the smartest model for the "Judge" role
+            model: JUDGE_MODEL, 
             contents: prompt,
             config: {
-                responseMimeType: "text/plain", // We just want raw HTML back
+                responseMimeType: "text/plain", 
             }
         });
 
         let cleanedHtml = response.text || "";
         
         // STRICT CLEANUP: Extract only the HTML part if the model chatted
-        // This regex looks for <html...</html> or <!DOCTYPE...</html>
         const htmlMatch = cleanedHtml.match(/(?:<!DOCTYPE html>|<html)[\s\S]*<\/html>/i);
         
         if (htmlMatch) {
@@ -241,7 +323,6 @@ export const refineResume = async (
 
     } catch (error) {
         console.error("Refinement Error:", error);
-        // Fallback: If refinement fails, return original to avoid crashing the flow
         return currentHtml;
     }
 };

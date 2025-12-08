@@ -28,10 +28,17 @@ export interface EmailKit {
 
 export interface GeneratedAssets {
   resumeHtml: string;
-  coverLetter: string;
-  strategyStory: string;
-  interviewPrep: InterviewQuestion[];
-  emailKit: EmailKit;
+  coverLetter?: string;
+  strategyStory?: string;
+  interviewPrep?: InterviewQuestion[];
+  emailKit?: EmailKit;
+}
+
+export interface GenerationOptions {
+  coverLetter: boolean;
+  strategy: boolean;
+  interviewPrep: boolean;
+  outreach: boolean;
 }
 
 export type ApplicationStatus = 'active' | 'rejected' | 'hired' | 'ghosted';
@@ -49,8 +56,11 @@ export interface ApplicationRecord {
   date: string;
   title: string;
   company: string;
+  // Saved Context for future generation
+  description: string; 
+  profileContent: string;
+  
   assets: GeneratedAssets;
-  // New tracking fields
   overallStatus: ApplicationStatus;
   stages: RecruitmentStage[];
 }

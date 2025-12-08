@@ -1,6 +1,7 @@
+
 import React, { useState, useEffect, useRef } from 'react';
-import { AppState, AppStatus, UserProfile, JobDetails, ApplicationRecord, GeneratedAssets } from './types';
-import { generateApplicationAssets, refineResume } from './services/gemini';
+import { AppState, AppStatus, UserProfile, JobDetails, ApplicationRecord, GeneratedAssets, GenerationOptions } from './types';
+import { generateApplicationAssets, refineResume, generateSingleAsset } from './services/gemini';
 import { authService } from './services/auth';
 import { fileSystemService } from './services/fileSystem';
 import FileUpload from './components/FileUpload';
@@ -14,10 +15,20 @@ function App() {
   const [darkMode, setDarkMode] = useState(false);
   const [activeTab, setActiveTab] = useState<'create' | 'applications'>('create');
   const [isAppSaved, setIsAppSaved] = useState(false);
+  const [activeTabResult, setActiveTabResult] = useState<string | null>(null);
   
+  // Generation Options
+  const [genOptions, setGenOptions] = useState<GenerationOptions>({
+    coverLetter: true,
+    strategy: true,
+    interviewPrep: true,
+    outreach: true
+  });
+
   // Cinematic Loading State
   const [generationPhase, setGenerationPhase] = useState<'idle' | 'drafting' | 'refining' | 'complete'>('idle');
   const [loadingProgress, setLoadingProgress] = useState({ message: 'Starting...', percent: 0 });
+  const [activeDraftingMessages, setActiveDraftingMessages] = useState<string[]>([]);
   
   const [state, setState] = useState<AppState>({
     status: AppStatus.IDLE,
@@ -54,27 +65,33 @@ function App() {
   // Cinematic Loading Logic
   useEffect(() => {
     let interval: ReturnType<typeof setInterval>;
-    const draftingMessages = ["Drafting Resume...", "Writing Cover Letter...", "Designing Strategy...", "Compiling Interview Prep..."];
     
     if (generationPhase === 'drafting') {
       console.log("Phase: Drafting Started");
       setLoadingProgress({ message: "Initializing Agent...", percent: 0 });
       let p = 0;
       let ticks = 0;
+      
+      const isSingleAsset = activeDraftingMessages.length === 1;
+      // Single Asset: 25s (250 ticks). Full Kit: 12s per item * count.
+      const totalTicksNeeded = isSingleAsset ? 250 : activeDraftingMessages.length * 120;
+      // Single Asset Target: 99%. Full Kit Target: 67% (waiting for judge)
+      const targetPercent = isSingleAsset ? 99 : 67;
+
       interval = setInterval(() => {
         ticks++;
-        // Creep to 67% over 60 seconds (600 ticks)
-        if (p < 67) {
-          p += (67 / 600); // approximate increments
-          // Ensure we don't overshoot if laggy
-          if (p > 67) p = 67;
+        
+        // Creep to target% over totalTicksNeeded
+        if (p < targetPercent) {
+          p += (targetPercent / totalTicksNeeded); 
+          if (p > targetPercent) p = targetPercent;
         }
         
-        // Cycle messages every 12 seconds (120 ticks) and don't loop/overflow
-        const msgIndex = Math.min(Math.floor(ticks / 120), draftingMessages.length - 1);
+        // Cycle messages every 12 seconds (120 ticks)
+        const msgIndex = Math.min(Math.floor(ticks / 120), activeDraftingMessages.length - 1);
         
         setLoadingProgress({ 
-          message: draftingMessages[msgIndex], 
+          message: activeDraftingMessages[msgIndex] || "Processing...", 
           percent: Math.floor(p) 
         });
       }, 100);
@@ -106,7 +123,7 @@ function App() {
     }
 
     return () => clearInterval(interval);
-  }, [generationPhase]);
+  }, [generationPhase, activeDraftingMessages]);
 
 
   // Check for stored API Key and Profile on mount
@@ -178,6 +195,107 @@ function App() {
     }));
   };
 
+  // Map asset keys to ResultTabs keys
+  const getTabIdFromAsset = (asset: keyof GeneratedAssets): string => {
+      switch(asset) {
+          case 'resumeHtml': return 'resume';
+          case 'coverLetter': return 'coverLetter';
+          case 'strategyStory': return 'story';
+          case 'interviewPrep': return 'interview';
+          case 'emailKit': return 'outreach';
+          default: return 'resume';
+      }
+  }
+
+  // Handler for Active Application Asset Generation
+  const handleActiveAssetGeneration = async (assetType: keyof GeneratedAssets) => {
+    if (!state.userProfile || !state.jobDetails.title || !apiKey) return;
+    
+    setGenerationPhase('drafting');
+    setActiveDraftingMessages([`Generating ${assetType}...`]);
+    setState(prev => ({ ...prev, status: AppStatus.PROCESSING }));
+
+    try {
+        const result = await generateSingleAsset(
+            assetType as any, 
+            state.userProfile, 
+            state.jobDetails, 
+            apiKey
+        );
+
+        const updatedResults = { ...state.results!, [assetType]: result };
+        
+        handleAssetsUpdate(updatedResults);
+        
+        // Determine tab to switch to
+        const tabId = getTabIdFromAsset(assetType);
+        
+        setGenerationPhase('complete');
+        setTimeout(() => {
+             setState(prev => ({ ...prev, status: AppStatus.COMPLETE }));
+             setGenerationPhase('idle');
+             setActiveTabResult(tabId); // Switch tab
+        }, 800);
+
+    } catch (e) {
+        console.error("Single asset generation failed", e);
+        setState(prev => ({ 
+            ...prev, 
+            status: AppStatus.COMPLETE, // Go back to view
+            error: "Failed to generate asset. Please try again."
+        }));
+        setGenerationPhase('idle');
+    }
+  };
+
+  // Handler for History Asset Generation
+  const handleHistoryAssetGeneration = async (recordId: string, assetType: keyof GeneratedAssets, recordContext: ApplicationRecord) => {
+      if (!apiKey) return;
+
+      // Reconstruct simple objects from record context
+      const profile: UserProfile = { content: recordContext.profileContent, fileName: 'History Profile' };
+      const job: JobDetails = { title: recordContext.title, company: recordContext.company, description: recordContext.description };
+
+      // Set Loading Overlay (Without changing main view state status to PROCESSING to avoid unmounting History)
+      setGenerationPhase('drafting');
+      setActiveDraftingMessages([`Forging ${assetType} for ${job.company}...`]);
+      // We manually set status to PROCESSING just to show overlay, but careful not to lose view
+      // Actually, LoadingOverlay shows if state.status === PROCESSING.
+      // We will temporarily switch status, but keep tab as 'applications'
+      const prevStatus = state.status;
+      setState(prev => ({ ...prev, status: AppStatus.PROCESSING }));
+
+      try {
+          const result = await generateSingleAsset(
+              assetType as any,
+              profile,
+              job,
+              apiKey
+          );
+
+          // Update Record in FileSystem
+          const updatedAssets = { ...recordContext.assets, [assetType]: result };
+          const updatedRecord = { ...recordContext, assets: updatedAssets };
+          fileSystemService.updateApplicationInHistory(updatedRecord);
+          
+          setGenerationPhase('complete');
+          setTimeout(() => {
+              setState(prev => ({ ...prev, status: prevStatus })); // Restore previous status (likely IDLE or COMPLETE)
+              setGenerationPhase('idle');
+              // Force refresh of history is handled by ApplicationHistory component reloading or internal state update
+              // Ideally we callback or the component handles the reload.
+              // We can return the result here if needed, but the file system is the source of truth.
+          }, 800);
+          
+          return result; // Return for the UI to update immediately
+      } catch (e) {
+          console.error("History generation failed", e);
+          setState(prev => ({ ...prev, status: prevStatus, error: "Failed to generate asset." }));
+          setGenerationPhase('idle');
+          throw e;
+      }
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
@@ -185,19 +303,29 @@ function App() {
       return;
     }
 
+    // Prepare loading messages based on selection
+    const messages = ["Drafting Resume..."];
+    if (genOptions.coverLetter) messages.push("Writing Cover Letter...");
+    if (genOptions.strategy) messages.push("Designing Strategy...");
+    if (genOptions.interviewPrep) messages.push("Compiling Interview Prep...");
+    if (genOptions.outreach) messages.push("Drafting Emails...");
+    
+    setActiveDraftingMessages(messages);
+
     // Start Phase 1
     setState(prev => ({ ...prev, status: AppStatus.PROCESSING, error: null }));
     setGenerationPhase('drafting');
     setIsAppSaved(false);
 
     try {
-      console.log("Starting Generation...");
+      console.log("Starting Generation with options:", genOptions);
       
       // Step 1: Initial Generation
       const results = await generateApplicationAssets(
         state.userProfile, 
         state.jobDetails, 
-        apiKey
+        apiKey,
+        genOptions
       );
       
       console.log("Draft Generated. Starting Refinement...");
@@ -206,7 +334,6 @@ function App() {
       setGenerationPhase('refining');
 
       // Step 2: Surgical Refinement (LLM as a Judge)
-      // We pass the initially generated HTML to a second AI call to fix cut-offs and enforce alignment.
       const refinedHtml = await refineResume(
           results.resumeHtml, 
           state.jobDetails, 
@@ -214,17 +341,14 @@ function App() {
           apiKey
       );
 
-      // Update the results with the refined HTML
       const finalResults = {
           ...results,
           resumeHtml: refinedHtml
       };
 
-      // Finish
       setGenerationPhase('complete');
       console.log("Process Complete.");
 
-      // Small delay to let the user see 100%
       setTimeout(() => {
         setState(prev => ({
             ...prev,
@@ -258,11 +382,14 @@ function App() {
   const handleSaveApplication = () => {
     if (!state.results || !state.jobDetails.title) return;
 
+    // CRITICAL FIX: Saving context (Description & Profile) for future generations
     const record: ApplicationRecord = {
       id: Date.now().toString(),
       date: new Date().toISOString(),
       title: state.jobDetails.title,
       company: state.jobDetails.company || 'Unknown Company',
+      description: state.jobDetails.description, // Save JD
+      profileContent: state.userProfile?.content || "", // Save Profile Context
       assets: state.results,
       overallStatus: 'active',
       stages: [
@@ -291,6 +418,7 @@ function App() {
         error: null
     }));
     setIsAppSaved(false);
+    setActiveTabResult(null);
   };
 
   if (!apiKey) {
@@ -332,7 +460,6 @@ function App() {
         </div>
         
         <div className="flex items-center gap-4">
-          {/* Theme Toggle */}
           <button 
             onClick={toggleTheme}
             className="p-2 rounded-full text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
@@ -380,11 +507,13 @@ function App() {
         )}
 
         {activeTab === 'applications' ? (
-          <ApplicationHistory />
+          <ApplicationHistory 
+            onGenerateMissing={handleHistoryAssetGeneration}
+          />
         ) : (
           <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 h-full">
             
-            {/* Left Sidebar / Input Form */}
+            {/* Input Form */}
             <div className={`lg:col-span-4 flex flex-col gap-6 transition-all duration-500 ease-in-out ${state.status === AppStatus.COMPLETE ? 'lg:hidden' : ''}`}>
               <div className="space-y-1">
                 <h2 className="text-2xl font-bold text-slate-900 dark:text-white">New Application</h2>
@@ -393,7 +522,6 @@ function App() {
 
               <div className="bg-white dark:bg-slate-900 rounded-2xl shadow-[0_2px_12px_rgb(0,0,0,0.04)] dark:shadow-none border border-slate-200 dark:border-slate-800 p-6 space-y-6 transition-colors">
                 <form onSubmit={handleSubmit} className="space-y-6">
-                  
                   <FileUpload 
                     onFileSelect={handleFileSelect} 
                     fileName={state.userProfile?.fileName || null} 
@@ -414,7 +542,6 @@ function App() {
                         onChange={(e) => handleJobChange('title', e.target.value)}
                       />
                     </div>
-
                     <div>
                       <label htmlFor="companyName" className="block text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-1.5">
                         Company Name
@@ -429,7 +556,6 @@ function App() {
                         onChange={(e) => handleJobChange('company', e.target.value)}
                       />
                     </div>
-
                     <div>
                       <label htmlFor="jobDesc" className="block text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-1.5">
                         Job Description
@@ -446,6 +572,31 @@ function App() {
                         />
                       </div>
                     </div>
+                  </div>
+
+                  {/* Kit Options */}
+                  <div className="pt-2 border-t border-slate-200 dark:border-slate-800">
+                      <label className="block text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-3">
+                          Kit Options
+                      </label>
+                      <div className="grid grid-cols-2 gap-3">
+                          <label className="flex items-center space-x-2 cursor-pointer">
+                              <input type="checkbox" checked={genOptions.coverLetter} onChange={e => setGenOptions({...genOptions, coverLetter: e.target.checked})} className="rounded text-brand-600 focus:ring-brand-500 border-slate-300 dark:border-slate-700 bg-slate-50 dark:bg-slate-800" />
+                              <span className="text-sm text-slate-700 dark:text-slate-300">Cover Letter</span>
+                          </label>
+                          <label className="flex items-center space-x-2 cursor-pointer">
+                              <input type="checkbox" checked={genOptions.strategy} onChange={e => setGenOptions({...genOptions, strategy: e.target.checked})} className="rounded text-brand-600 focus:ring-brand-500 border-slate-300 dark:border-slate-700 bg-slate-50 dark:bg-slate-800" />
+                              <span className="text-sm text-slate-700 dark:text-slate-300">Strategy</span>
+                          </label>
+                          <label className="flex items-center space-x-2 cursor-pointer">
+                              <input type="checkbox" checked={genOptions.interviewPrep} onChange={e => setGenOptions({...genOptions, interviewPrep: e.target.checked})} className="rounded text-brand-600 focus:ring-brand-500 border-slate-300 dark:border-slate-700 bg-slate-50 dark:bg-slate-800" />
+                              <span className="text-sm text-slate-700 dark:text-slate-300">Interview</span>
+                          </label>
+                          <label className="flex items-center space-x-2 cursor-pointer">
+                              <input type="checkbox" checked={genOptions.outreach} onChange={e => setGenOptions({...genOptions, outreach: e.target.checked})} className="rounded text-brand-600 focus:ring-brand-500 border-slate-300 dark:border-slate-700 bg-slate-50 dark:bg-slate-800" />
+                              <span className="text-sm text-slate-700 dark:text-slate-300">Outreach</span>
+                          </label>
+                      </div>
                   </div>
 
                   <button
@@ -502,11 +653,13 @@ function App() {
                         </button>
                       </div>
                   </div>
-                  {/* CRITICAL UPDATE: Passing handleAssetsUpdate so edits in ResultsTabs flow back up */}
+                  {/* Reuse Active Asset Generation Handler */}
                   <ResultsTabs 
                     results={state.results} 
                     jobDetails={state.jobDetails} 
                     onUpdate={handleAssetsUpdate}
+                    onGenerateMissing={handleActiveAssetGeneration}
+                    requestedTab={activeTabResult}
                   />
                 </div>
               ) : (

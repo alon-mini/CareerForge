@@ -14,14 +14,19 @@ const DATA_DIR_NAME = 'user_data';
 
 export const authService = {
   
-  getConfigFile: (): string | null => {
-    if (!ipcRenderer || !path) return null;
+  getUserDataPath: (): string | null => {
+    if (!ipcRenderer) return null;
     try {
-        const rootDir = ipcRenderer.sendSync('get-user-data-path');
-        return path.join(rootDir, DATA_DIR_NAME, CONFIG_FILE);
+        return ipcRenderer.sendSync('get-user-data-path');
     } catch {
         return null;
     }
+  },
+
+  getConfigFile: (): string | null => {
+    const root = authService.getUserDataPath();
+    if (!root || !path) return null;
+    return path.join(root, DATA_DIR_NAME, CONFIG_FILE);
   },
 
   writeApiKeyToDisk: (apiKey: string) => {
@@ -29,7 +34,6 @@ export const authService = {
     if (!configPath || !fs || !path) return;
 
     try {
-      // Ensure dir exists
       const dir = path.dirname(configPath);
       if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
 
@@ -39,7 +43,6 @@ export const authService = {
       }
       
       config = { ...config, apiKey };
-      
       fs.writeFileSync(configPath, JSON.stringify(config, null, 2), 'utf-8');
     } catch (error) {
       console.error("Failed to write config:", error);
@@ -73,13 +76,9 @@ export const authService = {
   },
 
   setApiKey: (apiKey: string, remember: boolean) => {
-    // Always keep in session for current run
     sessionStorage.setItem(API_KEY_STORAGE_KEY, apiKey);
-
     if (remember) {
-      // Backup to localStorage
       localStorage.setItem(API_KEY_STORAGE_KEY, apiKey);
-      // Write to disk for cold boot persistence
       authService.writeApiKeyToDisk(apiKey);
     } else {
       localStorage.removeItem(API_KEY_STORAGE_KEY);
@@ -88,19 +87,14 @@ export const authService = {
   },
 
   getApiKey: (): string | null => {
-    // 1. Check Session (fastest, current tab)
     const sessionKey = sessionStorage.getItem(API_KEY_STORAGE_KEY);
     if (sessionKey) return sessionKey;
 
-    // 2. Check LocalStorage (browser persistence)
     const localKey = localStorage.getItem(API_KEY_STORAGE_KEY);
     if (localKey) return localKey;
 
-    // 3. Check disk (desktop app persistence)
     const diskKey = authService.readApiKeyFromDisk();
-    if (diskKey) {
-        return diskKey;
-    }
+    if (diskKey) return diskKey;
 
     return null;
   },

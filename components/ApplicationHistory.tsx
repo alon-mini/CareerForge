@@ -16,10 +16,9 @@ const ApplicationHistory: React.FC = () => {
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [newStageName, setNewStageName] = useState<string>('');
   const [addingStageTo, setAddingStageTo] = useState<string | null>(null);
-
+  
   useEffect(() => {
     const records = fileSystemService.loadApplicationHistory();
-    // Migration helper: If records don't have stages/status, add defaults
     const migrated = records.map(r => ({
       ...r,
       overallStatus: r.overallStatus || 'active',
@@ -35,9 +34,7 @@ const ApplicationHistory: React.FC = () => {
   };
 
   const updateRecord = (updatedRecord: ApplicationRecord) => {
-    // 1. Update local state
     setHistory(prev => prev.map(r => r.id === updatedRecord.id ? updatedRecord : r));
-    // 2. Persist to disk
     fileSystemService.updateApplicationInHistory(updatedRecord);
   };
 
@@ -46,32 +43,28 @@ const ApplicationHistory: React.FC = () => {
     updateRecord(updated);
   };
 
-  const addNewStage = (record: ApplicationRecord) => {
-    if (!newStageName.trim()) return;
+  const addNewStage = (record: ApplicationRecord, label: string) => {
+    if (!label.trim()) return;
 
     const newStage: RecruitmentStage = {
       id: Date.now().toString(),
-      label: newStageName.trim(),
+      label: label.trim(),
       completed: false,
-      current: false
+      current: false 
     };
 
     const updated = { ...record, stages: [...record.stages, newStage] };
     updateRecord(updated);
-    setNewStageName('');
-    setAddingStageTo(null);
   };
-
+  
   const setStageCurrent = (record: ApplicationRecord, stageIndex: number) => {
     const updatedStages = record.stages.map((s, idx) => ({
       ...s,
-      completed: idx < stageIndex, // Mark previous as completed
-      current: idx === stageIndex, // Mark this as current
+      completed: idx < stageIndex, 
+      current: idx === stageIndex,
       date: idx === stageIndex && !s.date ? new Date().toISOString() : s.date
     }));
 
-    // If setting a stage, ensure overall status isn't 'rejected' unless user explicitly sets it,
-    // but usually if you move a stage, it implies activity.
     let status = record.overallStatus;
     if (status === 'rejected' || status === 'ghosted') {
         status = 'active';
@@ -79,6 +72,13 @@ const ApplicationHistory: React.FC = () => {
 
     updateRecord({ ...record, stages: updatedStages, overallStatus: status });
   };
+
+  const handleManualAddStage = (record: ApplicationRecord) => {
+     if (!newStageName.trim()) return;
+     addNewStage(record, newStageName);
+     setNewStageName('');
+     setAddingStageTo(null);
+  }
 
   if (history.length === 0) {
     return (
@@ -97,10 +97,12 @@ const ApplicationHistory: React.FC = () => {
   return (
     <div className="space-y-6 animate-fade-in pb-20">
       <div className="flex items-center justify-between">
-          <h2 className="text-2xl font-bold text-slate-900 dark:text-white">Application Tracker</h2>
-          <span className="text-sm text-slate-500 dark:text-slate-400 bg-slate-100 dark:bg-slate-800 px-3 py-1 rounded-full">
-            {history.length} Applications
-          </span>
+          <div className="flex items-center gap-4">
+            <h2 className="text-2xl font-bold text-slate-900 dark:text-white">Application Tracker</h2>
+            <span className="text-sm text-slate-500 dark:text-slate-400 bg-slate-100 dark:bg-slate-800 px-3 py-1 rounded-full">
+                {history.length} Applications
+            </span>
+          </div>
       </div>
       
       {history.map((app) => {
@@ -257,10 +259,10 @@ const ApplicationHistory: React.FC = () => {
                                                 onChange={(e) => setNewStageName(e.target.value)}
                                                 placeholder="e.g. Home Assignment"
                                                 className="text-sm px-3 py-1.5 rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 focus:ring-2 focus:ring-brand-500 outline-none w-48"
-                                                onKeyDown={(e) => e.key === 'Enter' && addNewStage(app)}
+                                                onKeyDown={(e) => e.key === 'Enter' && handleManualAddStage(app)}
                                             />
                                             <button 
-                                                onClick={() => addNewStage(app)}
+                                                onClick={() => handleManualAddStage(app)}
                                                 className="p-1.5 bg-brand-600 text-white rounded-lg hover:bg-brand-700"
                                             >
                                                 <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">

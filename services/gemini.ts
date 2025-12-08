@@ -1,3 +1,4 @@
+
 import { GoogleGenAI, Type, Schema } from "@google/genai";
 import { UserProfile, JobDetails, GeneratedAssets } from "../types";
 
@@ -161,4 +162,73 @@ export const generateApplicationAssets = async (
     console.error("Gemini API Error:", error);
     throw error;
   }
+};
+
+/**
+ * "LLM as a Judge" - Surgical Refinement Step
+ * This function takes the already generated resume HTML and runs it through a second pass
+ * to fix specific errors, cut-offs, or alignment issues.
+ */
+export const refineResume = async (
+    currentHtml: string,
+    job: JobDetails,
+    profile: UserProfile,
+    apiKey: string
+): Promise<string> => {
+    if (!apiKey) throw new Error("API Key missing");
+
+    const ai = new GoogleGenAI({ apiKey });
+
+    const prompt = `
+        You are a Senior Technical Recruiter and Quality Assurance Specialist acting as a "Judge" for a resume application.
+        
+        Your Goal: Surgically repair and improve the provided Resume HTML.
+        
+        **INPUT DATA:**
+        1. **The Candidate's Master Profile**: To verify facts.
+        2. **The Target Job Description**: To ensure keyword alignment.
+        3. **The DRAFT Resume HTML**: The document you must fix.
+
+        **YOUR AUDIT CHECKLIST (Fix these issues immediately):**
+        1. **Integrity Check**: Does the HTML end abruptly? If so, complete the sentence and close all tags (</body>, </html>) properly.
+        2. **Keyword Injection**: The Draft might have missed specific hard skills mentioned in the JD. Surgically replace generic terms with specific keywords from the JD where truthful.
+        3. **Formatting**: Ensure the layout is preserved. Ensure strict one-page fit (A4). 
+        4. **Hallucination Check**: Ensure the Draft didn't invent experience not present in the Master Profile.
+        
+        **OUTPUT:**
+        Return ONLY the corrected, valid, full HTML string. Do not wrap it in markdown code blocks. Do not add explanations. Just the code.
+        
+        ---
+        **Master Profile:**
+        ${profile.content}
+        
+        **Job Description:**
+        ${job.description}
+        
+        **DRAFT HTML TO FIX:**
+        ${currentHtml}
+        ---
+    `;
+
+    try {
+        const response = await ai.models.generateContent({
+            model: MODEL_NAME, // Using the smartest model for the "Judge" role
+            contents: prompt,
+            config: {
+                responseMimeType: "text/plain", // We just want raw HTML back
+            }
+        });
+
+        let cleanedHtml = response.text || "";
+        
+        // Cleanup if the model wraps it in markdown despite instructions
+        cleanedHtml = cleanedHtml.replace(/^```html/, '').replace(/```$/, '').trim();
+        
+        return cleanedHtml;
+
+    } catch (error) {
+        console.error("Refinement Error:", error);
+        // Fallback: If refinement fails, return original to avoid crashing the flow
+        return currentHtml;
+    }
 };

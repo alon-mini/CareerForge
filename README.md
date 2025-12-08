@@ -7,12 +7,13 @@ CareerForge is a powerful, desktop-based tool designed to supercharge your job s
 ## 🚀 Features
 
 *   **Tailored Resumes**: Generates a one-page, A4-formatted HTML resume optimized for the specific role.
+*   **Resume Skins**: Instantly transform the look of your resume with multiple professional themes (Modern Blue, Executive Serif, Tech Minimalist) without regenerating content.
+*   **Surgical AI Refinement**: Uses a dual-stage AI process. First, a "Writer" agent drafts the content. Then, a "Judge" agent reviews the HTML to fix formatting errors, ensure strict one-page fit, and verify facts.
+*   **Full In-App Editing**: Don't like a phrase? Switch to "Edit Mode" to tweak cover letters, interview answers, or even the raw HTML of your resume directly within the app.
 *   **Human-Centric Cover Letters**: Writes authentic, non-robotic cover letters that connect your past wins to future challenges.
 *   **Strategy & Interview Prep**: Provides a narrative strategy ("The Story") and generates 5 tough, role-specific interview questions with answer guides.
-*   **Outreach Kit**: Pre-written LinkedIn connection notes and post-interview thank you emails.
-*   **Interactive Application Tracker**: Don't just save your applications—manage them. Track each opportunity through a customizable, visual timeline from "Applied" to "Offer". Add custom stages, mark progress, and see your entire pipeline at a glance.
-*   **Persistent & Safe Data**: Your profile, API key, and application history are stored securely in your operating system's standard application data folder. This means your data is safe and persists even when you update the application.
-*   **Dark Mode**: A sleek, high-contrast UI designed for focused work.
+*   **Interactive Application Tracker**: Manage your pipeline from "Applied" to "Offer". Track stages, add custom steps (e.g., "Home Assignment"), and visualize your progress.
+*   **Persistent & Safe Data**: Your profile, API key, and application history are stored securely in your operating system's standard application data folder (`%APPDATA%`).
 *   **PDF Generation**: Native PDF export for Resumes and Cover Letters.
 
 ## 🛠 Prerequisites
@@ -63,22 +64,18 @@ Your "Source of Truth" is a `.md` (Markdown) or `.txt` file containing your enti
 1.  **Target Role**: Enter the Job Title (e.g., "Senior Frontend Engineer").
 2.  **Company**: Enter the Company Name (e.g., "TechCorp").
 3.  **Job Description**: Paste the full text of the job posting.
-4.  **Generate**: Click "Generate Assets".
+4.  **Generate**: Click "Generate Assets". The app will use a progress bar to show the status of the Analysis -> Drafting -> Refinement pipeline.
 
-### 4. Review & Export
-Once generation is complete (usually 10-20 seconds), explore the tabs:
-*   **Resume**: View the generated HTML resume. Click **"Download PDF"** to save it.
-*   **Cover Letter**: Review the text. Click **"Download PDF"** for a print-ready version or copy the text.
-*   **Strategy**: Read your narrative arc and talking points.
-*   **Interview Prep**: Study the 5 generated questions and answer strategies.
-*   **Outreach**: Copy the LinkedIn note or Thank You email templates.
+### 4. Review, Edit & Export
+Once generation is complete:
+*   **Resume Skins**: In the Resume tab, use the "Skin" dropdown to choose a style that fits the company culture.
+*   **Edit Mode**: Toggle "Edit Mode" in the top right corner to make manual changes to any text. For the resume, this opens a raw code editor for precise HTML control.
+*   **Export**: Click **"Download PDF"** to save your documents.
 
 ### 5. Tracking Your Application
-1.  **Save the Kit**: After generating assets for a role you've applied to, click the **"Application Sent"** button. This saves the entire kit to your local history.
-2.  **Manage Your Pipeline**: Navigate to the **"Applications"** tab. Here you'll find all your saved applications.
-3.  **Track Progress**: Click on an application to expand its details. You'll see a visual timeline of your recruitment process. Click on a stage (e.g., "Phone Screen") to mark it as your current step.
-4.  **Customize Stages**: Use the "Add custom stage" button to add unique steps to your process, like "Home Assignment" or "Team Fit Interview".
-5.  **Update Status**: Quickly update the overall status of an application to "Terminated", "Offer/Hired", or "Ghosted" using the status controls.
+1.  **Save the Kit**: Click **"Application Sent"** to save the entire kit to your local history.
+2.  **Manage Your Pipeline**: Navigate to the **"Applications"** tab to see your visual timeline.
+3.  **Track Progress**: Click stages to mark them as current, add custom stages, or update the overall status (Active, Rejected, Hired).
 
 ## 📂 Data Structure
 
@@ -89,8 +86,8 @@ You can find it here:
 
 Inside that folder, you will find:
 *   `user_data/profile.md`: Your saved "Source of Truth" profile.
-*   `user_data/config.json`: Your securely stored API key (if you chose "Remember Key").
-*   `user_data/Kits/applications.json`: A structured JSON file containing your entire application history, including all generated assets and tracker statuses.
+*   `user_data/config.json`: Your securely stored API key.
+*   `user_data/Kits/applications.json`: A structured JSON file containing your entire application history.
 
 ## 🎨 Customization
 

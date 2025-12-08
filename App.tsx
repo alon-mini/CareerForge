@@ -1,7 +1,7 @@
 
 import React, { useState, useEffect } from 'react';
-import { AppState, AppStatus, UserProfile, JobDetails, ApplicationRecord } from './types';
-import { generateApplicationAssets } from './services/gemini';
+import { AppState, AppStatus, UserProfile, JobDetails, ApplicationRecord, GeneratedAssets } from './types';
+import { generateApplicationAssets, refineResume } from './services/gemini';
 import { authService } from './services/auth';
 import { fileSystemService } from './services/fileSystem';
 import FileUpload from './components/FileUpload';
@@ -127,11 +127,28 @@ function App() {
     setIsAppSaved(false);
 
     try {
+      // Step 1: Initial Generation
       const results = await generateApplicationAssets(state.userProfile, state.jobDetails, apiKey);
+      
+      // Step 2: Surgical Refinement (LLM as a Judge)
+      // We pass the initially generated HTML to a second AI call to fix cut-offs and enforce alignment.
+      const refinedHtml = await refineResume(
+          results.resumeHtml, 
+          state.jobDetails, 
+          state.userProfile, 
+          apiKey
+      );
+
+      // Update the results with the refined HTML
+      const finalResults = {
+          ...results,
+          resumeHtml: refinedHtml
+      };
+
       setState(prev => ({
         ...prev,
         status: AppStatus.COMPLETE,
-        results
+        results: finalResults
       }));
     } catch (err) {
       setState(prev => ({
@@ -140,6 +157,15 @@ function App() {
         error: err instanceof Error ? err.message : "An unknown error occurred."
       }));
     }
+  };
+
+  const handleAssetsUpdate = (updatedAssets: GeneratedAssets) => {
+    setState(prev => ({
+      ...prev,
+      results: updatedAssets
+    }));
+    // If user edits content, mark as unsaved so they know to save the new version
+    setIsAppSaved(false);
   };
 
   const handleSaveApplication = () => {
@@ -387,8 +413,12 @@ function App() {
                         </button>
                       </div>
                   </div>
-                  {/* CRITICAL UPDATE: Passing jobDetails prop for correct PDF file naming */}
-                  <ResultsTabs results={state.results} jobDetails={state.jobDetails} />
+                  {/* CRITICAL UPDATE: Passing handleAssetsUpdate so edits in ResultsTabs flow back up */}
+                  <ResultsTabs 
+                    results={state.results} 
+                    jobDetails={state.jobDetails} 
+                    onUpdate={handleAssetsUpdate}
+                  />
                 </div>
               ) : (
                 <div className="h-full min-h-[600px] flex flex-col items-center justify-center text-slate-400 dark:text-slate-500 bg-white/50 dark:bg-slate-900/50 border border-dashed border-slate-200 dark:border-slate-800 rounded-2xl transition-colors">

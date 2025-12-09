@@ -1,6 +1,7 @@
+
 {
   "name": "career-forge-desktop",
-  "version": "1.0.10",
+  "version": "1.0.14",
   "description": "AI-powered job application assistant.",
   "author": {
     "name": "CareerForge Team",
@@ -35,7 +36,7 @@
     }
   },
   "dependencies": {
-    "@google/genai": "^0.2.0",
+    "@google/genai": "^1.0.0",
     "react": "^18.2.0",
     "react-dom": "^18.2.0"
   },

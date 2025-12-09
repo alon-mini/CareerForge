@@ -1,21 +1,27 @@
 # CareerForge - Desktop AI Job Search Assistant
 
-CareerForge is a powerful, desktop-based command center designed to supercharge your job search. It transforms your professional "Source of Truth" (a markdown profile) and a target Job Description into a perfectly tailored application kit.
+CareerForge is a professional-grade desktop command center designed to supercharge your job search. It uses advanced AI to transform your professional "Source of Truth" (a master profile) and a target Job Description into a perfectly tailored application kit.
 
-**Current Version:** 1.0.10
+**Current Version:** 1.0.14
 
 ![CareerForge](logoc.png)
 
 ## 🚀 Key Features
 
-### 🧠 Dual-Engine AI Architecture
-*   **The Writer (`gemini-3-pro-preview`)**: Handles creative tasks like strategy narratives, cover letters, and resume drafting with high reasoning capabilities.
-*   **The Judge (`gemini-2.5-flash`)**: A specialized "Surgical Refinement" agent that audits the generated resume HTML to fix formatting, ensure strict one-page fit, and scrub artifacts before you ever see it.
+### 🧠 Next-Gen AI Architecture
+*   **The Writer (`gemini-2.5-pro`)**: Handles heavy cognitive tasks like layout design, strategy narratives, and resume drafting with a massive thinking budget.
+*   **The Judge (`gemini-2.5-pro`)**: A specialized "Surgical Refinement" agent that audits the generated resume HTML to fix formatting, ensure strict one-page fit, and scrub artifacts.
+*   **The Assistant (`gemini-2.5-flash`)**: Powers fast tasks like job parsing and profile generation.
+
+### ✨ Smart Automation
+*   **Master Profile Wizard**: Don't have a master resume? The built-in 5-step wizard interviews you and generates a perfectly structured Markdown profile to use as your "Source of Truth".
+*   **Smart Clipboard Auto-Fill**: One click analyzes the text in your clipboard to instantly populate the Job Title, Company, and Description fields. No more manual copy-pasting.
+*   **Usage & Cost Tracker**: Monitor your token consumption and estimated API costs in real-time via the built-in dashboard.
 
 ### 🎨 Visual & Functional Power
-*   **Modular Generation**: You choose what to forge. Only need a CV? Uncheck the rest. Want the full kit? Select Cover Letter, Strategy, Interview Prep, and Outreach.
+*   **Modular Generation**: Choose exactly what you need. Only want a CV? Uncheck the rest. Need the full suite? Generate Cover Letter, Strategy, Interview Prep, and Outreach emails.
 *   **Resume Skins**: Instantly transform the look of your resume with professional themes (Modern Blue, Executive Serif, Tech Minimalist) without regenerating content.
-*   **WYSIWYG "Direct Edit"**: Don't like a phrase? Toggle "Edit Mode" and click directly on the resume preview to type changes. No code required.
+*   **WYSIWYG "Direct Edit"**: Toggle "Edit Mode" to click and type directly on the resume preview. No code required.
 *   **Native PDF Export**: Generate clean, print-ready PDFs for your Resume and Cover Letter.
 
 ### 🗂️ Application Tracker & History
@@ -65,12 +71,13 @@ Upon first launch, enter your **Gemini API Key**.
 
 ### 2. Setting Your Source of Truth
 Your "Source of Truth" is a `.md` or `.txt` file containing your entire professional history.
-*   **Upload**: Drag and drop your file.
-*   **Persist**: Check **"Remember this profile"** to save it to disk so it auto-loads next time.
+*   **Upload**: Drag and drop your existing file.
+*   **Create**: Click "Don't have a profile?" to launch the **Profile Wizard** and generate one from scratch.
+*   **Persist**: Check **"Remember this profile"** to save it to disk.
 
 ### 3. Forging an Application
-1.  **Inputs**: Enter the Job Title, Company, and paste the Job Description.
-2.  **Modular Options**: Check the boxes for the assets you want (Resume is mandatory; Cover Letter, Strategy, etc., are optional).
+1.  **Inputs**: Copy a job post and click **"Auto-Fill from Clipboard"**.
+2.  **Modular Options**: Check the boxes for the assets you want (Resume is mandatory).
 3.  **Generate**: Click "Generate Assets". The cinematic progress bar will track the drafting and refinement phases.
 
 ### 4. Review & Edit
@@ -92,6 +99,7 @@ The app stores all user data in `%APPDATA%\CareerForge` (Windows) to ensure pers
 *   `user_data/profile.md`: Your master profile.
 *   `user_data/config.json`: Encrypted-like storage for API key.
 *   `user_data/Kits/applications.json`: The database of all your applications and their current status.
+*   `user_data/usage.json`: Log of API token usage.
 
 ## 🐛 Debugging
 

@@ -4,10 +4,21 @@ import { UserProfile } from "../types";
 const API_KEY_STORAGE_KEY = 'careerForge_apiKey';
 const PROFILE_STORAGE_KEY = 'careerForge_default_profile';
 
-// Electron Node Integration imports
-const fs = (window as any).require ? (window as any).require('fs') : null;
-const path = (window as any).require ? (window as any).require('path') : null;
-const { ipcRenderer } = (window as any).require ? (window as any).require('electron') : { ipcRenderer: null };
+// Electron Node Integration imports with safe fallbacks
+let fs: any = null;
+let path: any = null;
+let ipcRenderer: any = null;
+
+try {
+  if ((window as any).require) {
+    fs = (window as any).require('fs');
+    path = (window as any).require('path');
+    const electron = (window as any).require('electron');
+    ipcRenderer = electron ? electron.ipcRenderer : null;
+  }
+} catch (e) {
+  console.warn("Electron modules not available.");
+}
 
 const CONFIG_FILE = 'config.json';
 const DATA_DIR_NAME = 'user_data';

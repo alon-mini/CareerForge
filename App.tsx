@@ -1,7 +1,7 @@
 
 import React, { useState, useEffect, useRef } from 'react';
 import { AppState, AppStatus, UserProfile, JobDetails, ApplicationRecord, GeneratedAssets, GenerationOptions } from './types';
-import { generateApplicationAssets, refineResume, generateSingleAsset } from './services/gemini';
+import { generateApplicationAssets, refineResume, generateSingleAsset, parseJobPosting, generateMasterProfile } from './services/gemini';
 import { authService } from './services/auth';
 import { fileSystemService } from './services/fileSystem';
 import FileUpload from './components/FileUpload';
@@ -9,6 +9,8 @@ import ResultsTabs from './components/ResultsTabs';
 import LoadingOverlay from './components/LoadingOverlay';
 import LoginScreen from './components/LoginScreen';
 import ApplicationHistory from './components/ApplicationHistory';
+import ProfileWizard from './components/ProfileWizard';
+import UsageModal from './components/UsageModal';
 
 function App() {
   const [apiKey, setApiKey] = useState<string | null>(null);
@@ -16,6 +18,8 @@ function App() {
   const [activeTab, setActiveTab] = useState<'create' | 'applications'>('create');
   const [isAppSaved, setIsAppSaved] = useState(false);
   const [activeTabResult, setActiveTabResult] = useState<string | null>(null);
+  const [showProfileWizard, setShowProfileWizard] = useState(false);
+  const [showUsageModal, setShowUsageModal] = useState(false);
   
   // Generation Options
   const [genOptions, setGenOptions] = useState<GenerationOptions>({
@@ -186,6 +190,66 @@ function App() {
     }
 
     setState(prev => ({ ...prev, userProfile }));
+  };
+
+  const handleSmartPaste = async () => {
+      if (!apiKey) return;
+      try {
+          const text = await navigator.clipboard.readText();
+          if (!text) return;
+          
+          setGenerationPhase('drafting');
+          setActiveDraftingMessages(['Analyzing Job Posting...']);
+          setState(prev => ({ ...prev, status: AppStatus.PROCESSING }));
+
+          const details = await parseJobPosting(text, apiKey);
+          
+          setState(prev => ({
+              ...prev,
+              jobDetails: details,
+              status: AppStatus.IDLE
+          }));
+          setGenerationPhase('idle');
+      } catch (e) {
+          console.error("Smart paste failed", e);
+          setState(prev => ({ ...prev, status: AppStatus.IDLE }));
+          setGenerationPhase('idle');
+          alert("Failed to analyze clipboard content. Please paste manually.");
+      }
+  };
+
+  const handleMasterProfileGeneration = async (answers: Record<string, string>) => {
+      if (!apiKey) return;
+      setShowProfileWizard(false);
+      setGenerationPhase('drafting');
+      setActiveDraftingMessages(['Forging Master Profile...']);
+      setState(prev => ({ ...prev, status: AppStatus.PROCESSING }));
+
+      try {
+          const profileContent = await generateMasterProfile(answers, apiKey);
+          
+          // Save the generated profile
+          const userProfile = { content: profileContent, fileName: 'master_resume.md' };
+          
+          // Save to disk automatically
+          fileSystemService.saveProfileToDisk(profileContent);
+          authService.saveUserProfile(userProfile);
+          
+          setState(prev => ({
+              ...prev,
+              userProfile: userProfile,
+              status: AppStatus.IDLE
+          }));
+          setGenerationPhase('idle');
+      } catch (e) {
+          console.error("Profile gen failed", e);
+          setState(prev => ({ 
+              ...prev, 
+              status: AppStatus.ERROR, 
+              error: "Failed to generate master profile. Please try again." 
+          }));
+          setGenerationPhase('idle');
+      }
   };
 
   const handleJobChange = (field: keyof JobDetails, value: string) => {
@@ -430,6 +494,17 @@ function App() {
       {state.status === AppStatus.PROCESSING && (
         <LoadingOverlay message={loadingProgress.message} progress={loadingProgress.percent} />
       )}
+      
+      {showProfileWizard && (
+          <ProfileWizard 
+            onClose={() => setShowProfileWizard(false)}
+            onSubmit={handleMasterProfileGeneration}
+          />
+      )}
+
+      {showUsageModal && (
+          <UsageModal onClose={() => setShowUsageModal(false)} />
+      )}
 
       {/* Navigation Bar */}
       <nav className="sticky top-0 z-30 bg-white/80 dark:bg-slate-900/80 backdrop-blur-md border-b border-slate-200 dark:border-slate-800 px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between transition-colors duration-300">
@@ -460,6 +535,15 @@ function App() {
         </div>
         
         <div className="flex items-center gap-4">
+          <button 
+             onClick={() => setShowUsageModal(true)}
+             className="text-sm font-medium text-slate-500 hover:text-indigo-600 dark:text-slate-400 dark:hover:text-indigo-400 transition-colors flex items-center gap-1"
+          >
+             <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+             </svg>
+             Usage
+          </button>
           <button 
             onClick={toggleTheme}
             className="p-2 rounded-full text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
@@ -525,13 +609,27 @@ function App() {
                   <FileUpload 
                     onFileSelect={handleFileSelect} 
                     fileName={state.userProfile?.fileName || null} 
+                    onCreateProfile={() => setShowProfileWizard(true)}
                   />
 
                   <div className="space-y-4">
+                    <div className="flex justify-between items-end mb-1.5">
+                         <label htmlFor="jobTitle" className="block text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">
+                             Target Role
+                         </label>
+                         <button
+                             type="button"
+                             onClick={handleSmartPaste}
+                             className="text-xs flex items-center gap-1 text-brand-600 dark:text-brand-400 hover:underline font-semibold"
+                             title="Auto-fill Title, Company, and Description from your clipboard"
+                         >
+                             <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19.428 15.428a2 2 0 00-1.022-.547l-2.387-.477a6 6 0 00-3.86.517l-.318.158a6 6 0 01-3.86.517L6.05 15.21a2 2 0 00-1.806.547M8 4h8l-1 1v5.172a2 2 0 00.586 1.414l5 5c1.26 1.26.367 3.414-1.415 3.414H4.828c-1.782 0-2.674-2.154-1.414-3.414l5-5A2 2 0 009 10.172V5L8 4z" />
+                             </svg>
+                             Auto-Fill from Clipboard
+                         </button>
+                    </div>
                     <div>
-                      <label htmlFor="jobTitle" className="block text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-1.5">
-                        Target Role
-                      </label>
                       <input
                         type="text"
                         id="jobTitle"

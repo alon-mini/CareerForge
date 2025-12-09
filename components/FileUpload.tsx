@@ -4,9 +4,10 @@ import React, { useRef, useState } from 'react';
 interface FileUploadProps {
   onFileSelect: (content: string, fileName: string, persist: boolean) => void;
   fileName: string | null;
+  onCreateProfile?: () => void;
 }
 
-const FileUpload: React.FC<FileUploadProps> = ({ onFileSelect, fileName }) => {
+const FileUpload: React.FC<FileUploadProps> = ({ onFileSelect, fileName, onCreateProfile }) => {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [isDragging, setIsDragging] = useState(false);
   const [rememberProfile, setRememberProfile] = useState(false);
@@ -120,17 +121,29 @@ const FileUpload: React.FC<FileUploadProps> = ({ onFileSelect, fileName }) => {
       </div>
 
       {!fileName && (
-        <div className="mt-3 flex items-center">
-          <input
-            id="remember-profile"
-            type="checkbox"
-            checked={rememberProfile}
-            onChange={(e) => setRememberProfile(e.target.checked)}
-            className="h-4 w-4 text-brand-600 focus:ring-brand-500 border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 rounded"
-          />
-          <label htmlFor="remember-profile" className="ml-2 block text-xs text-slate-500 dark:text-slate-400">
-            Remember this profile for future sessions (saves to disk)
-          </label>
+        <div className="mt-3 flex items-center justify-between">
+          <div className="flex items-center">
+            <input
+                id="remember-profile"
+                type="checkbox"
+                checked={rememberProfile}
+                onChange={(e) => setRememberProfile(e.target.checked)}
+                className="h-4 w-4 text-brand-600 focus:ring-brand-500 border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 rounded"
+            />
+            <label htmlFor="remember-profile" className="ml-2 block text-xs text-slate-500 dark:text-slate-400">
+                Remember this profile
+            </label>
+          </div>
+          
+          {/* New Profile Wizard Trigger */}
+          {onCreateProfile && (
+             <button 
+                onClick={(e) => { e.preventDefault(); onCreateProfile(); }}
+                className="text-xs text-brand-600 dark:text-brand-400 font-semibold hover:underline"
+             >
+                Don't have a profile? Create one!
+             </button>
+          )}
         </div>
       )}
     </div>

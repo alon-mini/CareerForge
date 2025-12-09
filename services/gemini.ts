@@ -1,12 +1,49 @@
 
-import { GoogleGenAI, Type, Schema } from "@google/genai";
+import { GoogleGenAI, Type, type Schema } from "@google/genai";
 import { UserProfile, JobDetails, GeneratedAssets, GenerationOptions } from "../types";
+import { fileSystemService } from "./fileSystem";
 
-// We use gemini-3-pro-preview for complex reasoning and content generation tasks (Creative Writer)
-const GENERATOR_MODEL = 'gemini-3-pro-preview';
+// We use Gemini 2.5 Pro for both roles as requested, leveraging its high reasoning capabilities and Thinking Config.
+const GENERATOR_MODEL = 'gemini-2.5-pro';
+const JUDGE_MODEL = 'gemini-2.5-pro';
+// Fast model for parsing and simple drafting
+const FAST_MODEL = 'gemini-2.5-flash';
 
-// We use gemini-2.5-flash for the "Judge" phase for maximum stability (no 503s) and speed
-const JUDGE_MODEL = 'gemini-2.5-flash';
+// Pricing Estimates (USD per 1M tokens) - based on 1.5 Pro/Flash standard pricing as proxy
+// Pro: Input $3.50, Output $10.50
+// Flash: Input $0.075, Output $0.30
+const PRICING: Record<string, { input: number; output: number }> = {
+    [FAST_MODEL]: { input: 0.075, output: 0.30 }
+};
+
+// Assign models separately to avoid duplicate key errors in object literal if models are identical
+PRICING[GENERATOR_MODEL] = { input: 3.50, output: 10.50 };
+// Only assign judge if it's different, otherwise it's already covered or overwritten safely above
+if (JUDGE_MODEL !== GENERATOR_MODEL) {
+    PRICING[JUDGE_MODEL] = { input: 3.50, output: 10.50 };
+}
+
+// Helper to calculate cost and log usage
+const logUsage = (model: string, usage: any, taskType: string) => {
+    if (!usage) return;
+    
+    const inputT = usage.promptTokenCount || 0;
+    const outputT = usage.candidatesTokenCount || 0;
+    const totalT = usage.totalTokenCount || (inputT + outputT);
+    
+    const rates = PRICING[model] || { input: 0, output: 0 };
+    const cost = ((inputT / 1000000) * rates.input) + ((outputT / 1000000) * rates.output);
+
+    fileSystemService.saveUsageLog({
+        timestamp: new Date().toISOString(),
+        model,
+        inputTokens: inputT,
+        outputTokens: outputT,
+        totalTokens: totalT,
+        cost,
+        taskType
+    });
+};
 
 // Definitions for schema parts
 const resumeSchemaPart = {
@@ -60,7 +97,17 @@ export const generateApplicationAssets = async (
 
   const ai = new GoogleGenAI({ apiKey });
 
-  console.log(`Gemini: Generating Draft using ${GENERATOR_MODEL}...`);
+  // Dynamically calculate Thinking Budget based on workload
+  // Base cost for Resume (Layout + Content): 4096 tokens
+  let thinkingBudget = 4096;
+  
+  // Add budget for additional complex tasks
+  if (options.coverLetter) thinkingBudget += 1024; // Tone matching & narrative
+  if (options.strategy) thinkingBudget += 1024; // Bridging logic
+  if (options.interviewPrep) thinkingBudget += 1024; // Predictive reasoning
+  if (options.outreach) thinkingBudget += 512; // Short form drafting
+
+  console.log(`Gemini: Generating Draft using ${GENERATOR_MODEL} with Thinking Budget: ${thinkingBudget}...`);
 
   // Dynamically build Schema Properties
   const properties: Record<string, any> = {
@@ -168,9 +215,13 @@ export const generateApplicationAssets = async (
       config: {
         responseMimeType: "application/json",
         responseSchema: dynamicSchema,
+        thinkingConfig: { thinkingBudget: thinkingBudget },
         systemInstruction: "You are a world-class career strategist. You prioritize concise, high-impact communication. You NEVER produce a resume longer than 1 page. You write cover letters that sound like real humans, not robots. You never use Markdown syntax in plain text fields. You never use Markdown syntax inside HTML code.",
       },
     });
+
+    // Log Usage
+    logUsage(GENERATOR_MODEL, response.usageMetadata, "Draft Generation");
 
     const text = response.text;
     if (!text) {
@@ -200,6 +251,9 @@ export const generateSingleAsset = async (
 
     let schema: any;
     let instruction = "";
+    
+    // Single task thinking budget
+    const SINGLE_TASK_BUDGET = 2048;
 
     switch(assetType) {
         case 'coverLetter':
@@ -235,10 +289,13 @@ export const generateSingleAsset = async (
             config: {
                 responseMimeType: "application/json",
                 responseSchema: schema,
+                thinkingConfig: { thinkingBudget: SINGLE_TASK_BUDGET },
                 systemInstruction: instruction
             }
         });
         
+        logUsage(GENERATOR_MODEL, response.usageMetadata, `Single Asset: ${assetType}`);
+
         // Safe JSON parsing with markdown cleanup
         let cleanedJson = response.text || "";
         cleanedJson = cleanedJson.replace(/^```json/, '').replace(/```$/, '').trim();
@@ -262,7 +319,11 @@ export const refineResume = async (
     if (!apiKey) throw new Error("API Key missing");
 
     const ai = new GoogleGenAI({ apiKey });
-    console.log(`Gemini: Starting Surgical Refinement using ${JUDGE_MODEL}...`);
+    
+    // High thinking budget for code auditing and repair
+    const JUDGE_THINKING_BUDGET = 4096;
+
+    console.log(`Gemini: Starting Surgical Refinement using ${JUDGE_MODEL} (Budget: ${JUDGE_THINKING_BUDGET})...`);
 
     const prompt = `
         You are a Senior Technical Recruiter and Quality Assurance Specialist acting as a "Judge" for a resume application.
@@ -277,9 +338,10 @@ export const refineResume = async (
         **YOUR AUDIT CHECKLIST (Fix these issues immediately):**
         1. **Integrity Check**: Does the HTML end abruptly? If so, complete the sentence and close all tags (</body>, </html>) properly.
         2. **Keyword Injection**: The Draft might have missed specific hard skills mentioned in the JD. Surgically replace generic terms with specific keywords from the JD where truthful.
-        3. **Formatting**: Ensure the layout is preserved. Ensure strict one-page fit (A4). 
-        4. **Hallucination Check**: Ensure the Draft didn't invent experience not present in the Master Profile.
-        5. **Markdown Scrubbing**: Scan for and REMOVE any markdown syntax like **bold** or *italics* or ### headers inside the HTML. Replace them with valid HTML tags (<strong>, <em>, <h3>) or remove them if they break the code.
+        3. **Fluff Elimination (CRITICAL)**: Scan for ambiguous fluff like "results-oriented," "hard worker," "responsible for," "proven track record," or "seasoned professional." DELETE these phrases or replace them with specific actions/results. If a sentence adds no concrete value, remove it entirely.
+        4. **Formatting**: Ensure the layout is preserved. Ensure strict one-page fit (A4). 
+        5. **Hallucination Check**: Ensure the Draft didn't invent experience not present in the Master Profile.
+        6. **Markdown Scrubbing**: Scan for and REMOVE any markdown syntax like **bold** or *italics* or ### headers inside the HTML. Replace them with valid HTML tags (<strong>, <em>, <h3>) or remove them if they break the code.
         
         **OUTPUT:**
         Return ONLY the corrected, valid, full HTML string. Do not wrap it in markdown code blocks. Do not add explanations. Just the code.
@@ -302,8 +364,11 @@ export const refineResume = async (
             contents: prompt,
             config: {
                 responseMimeType: "text/plain", 
+                thinkingConfig: { thinkingBudget: JUDGE_THINKING_BUDGET },
             }
         });
+
+        logUsage(JUDGE_MODEL, response.usageMetadata, "Surgical Refinement");
 
         let cleanedHtml = response.text || "";
         
@@ -326,3 +391,144 @@ export const refineResume = async (
         return currentHtml;
     }
 };
+
+/**
+ * Parses raw text from a job posting to extract structured details.
+ */
+export const parseJobPosting = async (text: string, apiKey: string): Promise<JobDetails> => {
+    if (!apiKey) throw new Error("API Key missing");
+    const ai = new GoogleGenAI({ apiKey });
+
+    const prompt = `
+        Analyze the following text from a job posting (which may contain noise, headers, footers, etc).
+        Extract:
+        1. Job Title
+        2. Company Name
+        3. A clean version of the Job Description (remove salary, 'about us', 'benefits' unless relevant).
+
+        Raw Text:
+        ${text.substring(0, 10000)}
+    `;
+
+    try {
+        const response = await ai.models.generateContent({
+            model: FAST_MODEL,
+            contents: prompt,
+            config: {
+                responseMimeType: "application/json",
+                responseSchema: {
+                    type: Type.OBJECT,
+                    properties: {
+                        title: { type: Type.STRING },
+                        company: { type: Type.STRING },
+                        description: { type: Type.STRING }
+                    },
+                    required: ["title", "company", "description"]
+                }
+            }
+        });
+
+        logUsage(FAST_MODEL, response.usageMetadata, "Job Parsing");
+        
+        let cleanedJson = response.text || "";
+        cleanedJson = cleanedJson.replace(/^```json/, '').replace(/```$/, '').trim();
+        return JSON.parse(cleanedJson);
+    } catch (error) {
+        console.error("Job Parse Error", error);
+        throw new Error("Failed to auto-fill details.");
+    }
+}
+
+/**
+ * Generates a structured Master Profile based on user wizard answers.
+ */
+export const generateMasterProfile = async (answers: Record<string, string>, apiKey: string): Promise<string> => {
+    if (!apiKey) throw new Error("API Key missing");
+    const ai = new GoogleGenAI({ apiKey });
+
+    const prompt = `
+        You are a professional resume writer. 
+        Take the user's raw answers from a questionnaire and compile them into a strictly structured "Master Resume" Markdown document.
+
+        **User Answers:**
+        ${JSON.stringify(answers, null, 2)}
+
+        **REQUIRED OUTPUT FORMAT (Markdown):**
+        
+        # [User Name]
+
+        ## 1. Core Identity & Value Proposition
+        * **Primary Profile:** [Job Title] & [Secondary Skillset] with a background in [Background].
+        * **Key Differentiator:** [Adjective] profile combining [Skill A] with [Skill B].
+        * **Focus:** Leveraging [Methodology] to build [Solutions], analyze [Data], and automate [Workflows].
+
+        ---
+
+        ## 2. Technical Skills Inventory
+
+        ### [Skill Category 1]
+        * **Core Methodology:** [Method Name]—[Explanation].
+        * **[Skill/Process Name]:** [Description].
+        * **[Tool/Implementation]:** [Tools used].
+        * **Models/Tech Used:** [List].
+
+        ### [Skill Category 2]
+        * **Languages:** [List].
+        * **[Specialized Skill]:** [Description].
+
+        ### [Skill Category 3]
+        * **Architecture:** [Details].
+        * **Tools:** [List].
+
+        ---
+
+        ## 3. Professional Experience
+
+        (Repeat for each role mentioned)
+        ### **[Company Name]** | *[Job Title]*
+        *[Start Date] – [End Date]*
+        *[One-sentence summary of role]*
+
+        * **[Key Responsibility]:** Action verb + result.
+        * **[Technical Implementation]:** 
+            * Designed [Protocol].
+            * Implemented [Workflow].
+        * **[Leadership/Metric]:** Achieved [Metric].
+
+        ---
+
+        ## 4. Academic Research & Education
+
+        ### **[Degree Name]**
+        *Focus: [Field]*
+        *[Year]*
+
+        ---
+
+        ## 5. Languages
+        * **[Language]:** [Level].
+
+        ## 6. Information
+        * **Linkedin:** [URL]
+        * **Mobile:** [Phone]
+        * **Email:** [Email]
+        * **Portfolio:** [URL]
+    `;
+
+    try {
+        const response = await ai.models.generateContent({
+            model: FAST_MODEL,
+            contents: prompt,
+            config: {
+                responseMimeType: "text/plain",
+            }
+        });
+        
+        logUsage(FAST_MODEL, response.usageMetadata, "Master Profile Generation");
+
+        return response.text || "";
+    } catch (error) {
+        console.error("Master Profile Generation Error", error);
+        throw new Error("Failed to generate master profile.");
+    }
+}

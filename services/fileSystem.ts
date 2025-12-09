@@ -1,15 +1,27 @@
 
-import { UserProfile, ApplicationRecord, GeneratedAssets } from "../types";
+import { UserProfile, ApplicationRecord, GeneratedAssets, UsageLog, TokenStats } from "../types";
 
 // In an Electron environment with nodeIntegration: true, we can use window.require
-const fs = (window as any).require ? (window as any).require('fs') : null;
-const path = (window as any).require ? (window as any).require('path') : null;
-const { ipcRenderer } = (window as any).require ? (window as any).require('electron') : { ipcRenderer: null };
+let fs: any = null;
+let path: any = null;
+let ipcRenderer: any = null;
+
+try {
+  if ((window as any).require) {
+    fs = (window as any).require('fs');
+    path = (window as any).require('path');
+    const electron = (window as any).require('electron');
+    ipcRenderer = electron ? electron.ipcRenderer : null;
+  }
+} catch (e) {
+  console.warn("Electron modules not available.");
+}
 
 const DATA_DIR_NAME = 'user_data';
 const KITS_DIR_NAME = 'Kits';
 const PROFILE_FILE_NAME = 'profile.md';
 const HISTORY_FILE_NAME = 'applications.json';
+const USAGE_FILE_NAME = 'usage.json';
 
 // Helper to get the Safe storage path (AppData)
 const getStoragePath = () => {
@@ -20,7 +32,7 @@ const getStoragePath = () => {
     return userDataPath;
   } catch (e) {
     // Fallback for dev mode outside electron
-    return (process as any).cwd();
+    return (process as any).cwd ? (process as any).cwd() : null;
   }
 };
 
@@ -176,5 +188,77 @@ export const fileSystemService = {
       console.error("Failed to load history:", error);
       return [];
     }
+  },
+
+  /**
+   * Saves an API usage log to usage.json
+   */
+  saveUsageLog: (log: UsageLog) => {
+    if (!fs || !path) return;
+
+    try {
+      const rootDir = getStoragePath();
+      if (!rootDir) return;
+      
+      const dataDir = path.join(rootDir, DATA_DIR_NAME);
+      if (!fs.existsSync(dataDir)) fs.mkdirSync(dataDir, { recursive: true });
+
+      const filePath = path.join(dataDir, USAGE_FILE_NAME);
+      let logs: UsageLog[] = [];
+
+      if (fs.existsSync(filePath)) {
+         try {
+           logs = JSON.parse(fs.readFileSync(filePath, 'utf-8'));
+         } catch { logs = []; }
+      }
+
+      logs.push(log);
+      fs.writeFileSync(filePath, JSON.stringify(logs, null, 2), 'utf-8');
+    } catch (e) {
+      console.error("Failed to log usage:", e);
+    }
+  },
+
+  /**
+   * Reads usage.json and calculates stats
+   */
+  getUsageStats: (): TokenStats => {
+     if (!fs || !path) {
+         return { totalTokens: 0, totalCost: 0, requestCount: 0, modelBreakdown: {} };
+     }
+
+     try {
+        const rootDir = getStoragePath();
+        if (!rootDir) return { totalTokens: 0, totalCost: 0, requestCount: 0, modelBreakdown: {} };
+        
+        const filePath = path.join(rootDir, DATA_DIR_NAME, USAGE_FILE_NAME);
+        if (!fs.existsSync(filePath)) return { totalTokens: 0, totalCost: 0, requestCount: 0, modelBreakdown: {} };
+
+        const logs: UsageLog[] = JSON.parse(fs.readFileSync(filePath, 'utf-8'));
+        
+        const stats: TokenStats = {
+            totalTokens: 0,
+            totalCost: 0,
+            requestCount: logs.length,
+            modelBreakdown: {}
+        };
+
+        logs.forEach(log => {
+            stats.totalTokens += log.totalTokens;
+            stats.totalCost += log.cost;
+            
+            if (!stats.modelBreakdown[log.model]) {
+                stats.modelBreakdown[log.model] = { tokens: 0, cost: 0 };
+            }
+            stats.modelBreakdown[log.model].tokens += log.totalTokens;
+            stats.modelBreakdown[log.model].cost += log.cost;
+        });
+
+        return stats;
+
+     } catch (e) {
+         console.error("Failed to get usage stats:", e);
+         return { totalTokens: 0, totalCost: 0, requestCount: 0, modelBreakdown: {} };
+     }
   }
 };

@@ -79,3 +79,20 @@ export interface AppState {
   results: GeneratedAssets | null;
   error: string | null;
 }
+
+export interface UsageLog {
+  timestamp: string;
+  model: string;
+  inputTokens: number;
+  outputTokens: number;
+  totalTokens: number;
+  cost: number;
+  taskType: string;
+}
+
+export interface TokenStats {
+  totalTokens: number;
+  totalCost: number;
+  requestCount: number;
+  modelBreakdown: Record<string, { tokens: number; cost: number }>;
+}

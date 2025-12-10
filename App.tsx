@@ -4,6 +4,7 @@ import { AppState, AppStatus, UserProfile, JobDetails, ApplicationRecord, Genera
 import { generateApplicationAssets, refineResume, generateSingleAsset, parseJobPosting, generateMasterProfile } from './services/gemini';
 import { authService } from './services/auth';
 import { fileSystemService } from './services/fileSystem';
+import { updateService } from './services/updateService';
 import FileUpload from './components/FileUpload';
 import ResultsTabs from './components/ResultsTabs';
 import LoadingOverlay from './components/LoadingOverlay';
@@ -11,6 +12,7 @@ import LoginScreen from './components/LoginScreen';
 import ApplicationHistory from './components/ApplicationHistory';
 import ProfileWizard from './components/ProfileWizard';
 import UsageModal from './components/UsageModal';
+import packageJson from '../package.json';
 
 function App() {
   const [apiKey, setApiKey] = useState<string | null>(null);
@@ -20,6 +22,7 @@ function App() {
   const [activeTabResult, setActiveTabResult] = useState<string | null>(null);
   const [showProfileWizard, setShowProfileWizard] = useState(false);
   const [showUsageModal, setShowUsageModal] = useState(false);
+  const [updateAvailable, setUpdateAvailable] = useState<{version: string, url: string} | null>(null);
   
   // Generation Options
   const [genOptions, setGenOptions] = useState<GenerationOptions>({
@@ -51,6 +54,17 @@ function App() {
       setDarkMode(false);
       document.documentElement.classList.remove('dark');
     }
+  }, []);
+
+  // Check for Updates on Mount
+  useEffect(() => {
+      const checkUpdate = async () => {
+          const info = await updateService.checkForUpdates(packageJson.version);
+          if (info.hasUpdate) {
+              setUpdateAvailable({ version: info.latestVersion, url: info.downloadUrl });
+          }
+      };
+      checkUpdate();
   }, []);
 
   // Toggle Theme
@@ -491,6 +505,25 @@ function App() {
 
   return (
     <div className="min-h-screen bg-slate-50 dark:bg-slate-950 font-sans text-slate-900 dark:text-slate-100 flex flex-col transition-colors duration-300">
+      
+      {/* UPDATE NOTIFICATION BANNER */}
+      {updateAvailable && (
+          <div className="bg-gradient-to-r from-indigo-600 to-brand-600 text-white text-sm font-semibold py-2 px-4 text-center cursor-pointer hover:opacity-95 transition-opacity relative z-50">
+              <a href={updateAvailable.url} target="_blank" rel="noopener noreferrer" className="flex items-center justify-center gap-2">
+                  <span className="bg-white/20 px-2 py-0.5 rounded text-xs">NEW</span>
+                  Version {updateAvailable.version} is available! Click here to download.
+              </a>
+              <button 
+                onClick={() => setUpdateAvailable(null)}
+                className="absolute right-4 top-1/2 -translate-y-1/2 text-white/60 hover:text-white"
+              >
+                  <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                  </svg>
+              </button>
+          </div>
+      )}
+      
       {state.status === AppStatus.PROCESSING && (
         <LoadingOverlay message={loadingProgress.message} progress={loadingProgress.percent} />
       )}

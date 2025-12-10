@@ -393,50 +393,34 @@ export const refineResume = async (
 };
 
 /**
- * Parses raw text from a job posting to extract structured details.
+ * Parses raw text from a job posting using Regex to extract structured details.
+ * Supports LinkedIn style postings in English and Hebrew.
  */
 export const parseJobPosting = async (text: string, apiKey: string): Promise<JobDetails> => {
-    if (!apiKey) throw new Error("API Key missing");
-    const ai = new GoogleGenAI({ apiKey });
+    // Note: apiKey is kept in signature for compatibility but currently unused for Regex
+    
+    // Regex logic to capture LinkedIn structure
+    // Captures: 1. Company, 2. Title, 3. Description
+    const linkedinRegex = /(?:[^\r\n]*logo[^\r\n]*|הלוגו\sשל\s[^\r\n]*)[\r\n]+(?<company>[^\r\n]+)[\r\n]+(?:Share|שיתוף)[^\r\n]*[\r\n]+(?:Show\smore\soptions|הצגת\sאפשרויות\sנוספות)[^\r\n]*[\r\n]+(?<title>[^\r\n]+)[\s\S]*?(?:About\sthe\sjob|אודות\sהמשרה)\s*(?<description>[\s\S]*?)(?=Job\ssearch\sfaster\swith\sPremium|About\sthe\scompany|השיגו\sאת\sהיעדים\sשלכם\sמהר\sיותר\sעם\sPremium|על\sאודות\sהחברה)/i;
 
-    const prompt = `
-        Analyze the following text from a job posting (which may contain noise, headers, footers, etc).
-        Extract:
-        1. Job Title
-        2. Company Name
-        3. A clean version of the Job Description (remove salary, 'about us', 'benefits' unless relevant).
+    const match = text.match(linkedinRegex);
 
-        Raw Text:
-        ${text.substring(0, 10000)}
-    `;
-
-    try {
-        const response = await ai.models.generateContent({
-            model: FAST_MODEL,
-            contents: prompt,
-            config: {
-                responseMimeType: "application/json",
-                responseSchema: {
-                    type: Type.OBJECT,
-                    properties: {
-                        title: { type: Type.STRING },
-                        company: { type: Type.STRING },
-                        description: { type: Type.STRING }
-                    },
-                    required: ["title", "company", "description"]
-                }
-            }
-        });
-
-        logUsage(FAST_MODEL, response.usageMetadata, "Job Parsing");
-        
-        let cleanedJson = response.text || "";
-        cleanedJson = cleanedJson.replace(/^```json/, '').replace(/```$/, '').trim();
-        return JSON.parse(cleanedJson);
-    } catch (error) {
-        console.error("Job Parse Error", error);
-        throw new Error("Failed to auto-fill details.");
+    if (match && match.groups) {
+        console.log("Smart Paste: Regex Match Successful");
+        return {
+            company: match.groups.company?.trim() || "",
+            title: match.groups.title?.trim() || "",
+            description: match.groups.description?.trim() || ""
+        };
     }
+
+    console.log("Smart Paste: Regex failed, falling back to full text description.");
+    // Fallback: If structure doesn't match, at least preserve the text in description so user isn't blank
+    return {
+        company: "",
+        title: "",
+        description: text
+    };
 }
 
 /**

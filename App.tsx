@@ -12,7 +12,9 @@ import LoginScreen from './components/LoginScreen';
 import ApplicationHistory from './components/ApplicationHistory';
 import ProfileWizard from './components/ProfileWizard';
 import UsageModal from './components/UsageModal';
-import packageJson from '../package.json';
+
+// Hardcoded version to avoid module resolution issues with importing package.json in browser env
+const APP_VERSION = '1.0.16';
 
 function App() {
   const [apiKey, setApiKey] = useState<string | null>(null);
@@ -59,7 +61,7 @@ function App() {
   // Check for Updates on Mount
   useEffect(() => {
       const checkUpdate = async () => {
-          const info = await updateService.checkForUpdates(packageJson.version);
+          const info = await updateService.checkForUpdates(APP_VERSION);
           if (info.hasUpdate) {
               setUpdateAvailable({ version: info.latestVersion, url: info.downloadUrl });
           }

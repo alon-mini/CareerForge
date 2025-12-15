@@ -14,7 +14,7 @@ import ProfileWizard from './components/ProfileWizard';
 import UsageModal from './components/UsageModal';
 
 // Hardcoded version to avoid module resolution issues with importing package.json in browser env
-const APP_VERSION = '1.0.17';
+const APP_VERSION = '1.0.18';
 
 function App() {
   const [apiKey, setApiKey] = useState<string | null>(null);

@@ -1,4 +1,5 @@
-const { app, BrowserWindow, ipcMain, dialog } = require('electron');
+
+const { app, BrowserWindow, ipcMain, dialog, safeStorage } = require('electron');
 const path = require('path');
 const fs = require('fs');
 
@@ -52,6 +53,60 @@ app.on('window-all-closed', () => {
 // Sync handler to get the User Data path (Roaming/AppData)
 ipcMain.on('get-user-data-path', (event) => {
   event.returnValue = app.getPath('userData');
+});
+
+/**
+ * SECURITY: Encryption Handlers using OS Keychain
+ */
+ipcMain.on('encrypt-string', (event, plainText) => {
+  if (!plainText) {
+    event.returnValue = '';
+    return;
+  }
+  
+  // Try OS-level encryption first (DPAPI/Keychain)
+  if (safeStorage && safeStorage.isEncryptionAvailable()) {
+    try {
+      const buffer = safeStorage.encryptString(plainText);
+      event.returnValue = buffer.toString('base64');
+      return;
+    } catch (error) {
+      console.error("Encryption failed:", error);
+    }
+  }
+  
+  // Fallback: Simple obfuscation for environments without keychain access
+  event.returnValue = Buffer.from(plainText).toString('base64');
+});
+
+ipcMain.on('decrypt-string', (event, encryptedBase64) => {
+  if (!encryptedBase64) {
+    event.returnValue = '';
+    return;
+  }
+
+  // 1. Try OS-level decryption
+  if (safeStorage && safeStorage.isEncryptionAvailable()) {
+    try {
+      const buffer = Buffer.from(encryptedBase64, 'base64');
+      const decrypted = safeStorage.decryptString(buffer);
+      event.returnValue = decrypted;
+      return;
+    } catch (error) {
+      // Decryption failed. This happens if:
+      // A) The data was stored using the fallback (base64) method originally.
+      // B) The OS keychain changed.
+      // We proceed to try the fallback method below.
+    }
+  }
+
+  // 2. Fallback: Try simple base64 decode
+  try {
+    event.returnValue = Buffer.from(encryptedBase64, 'base64').toString('utf-8');
+  } catch {
+    // If it wasn't base64 either, return original (might be legacy plain text handled by renderer)
+    event.returnValue = encryptedBase64;
+  }
 });
 
 // IPC Handler for PDF Generation with Text Layer

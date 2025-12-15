@@ -23,6 +23,55 @@ try {
 const CONFIG_FILE = 'config.json';
 const DATA_DIR_NAME = 'user_data';
 
+// --- Encryption Helpers ---
+
+const encryptValue = (value: string): string => {
+  if (!value) return '';
+  
+  if (ipcRenderer) {
+    try {
+      // Use OS-level encryption via Main process
+      // This returns a Base64 string of the encrypted buffer
+      return ipcRenderer.sendSync('encrypt-string', value);
+    } catch (e) {
+      console.error("Encryption IPC failed", e);
+      return btoa(value); // Fallback
+    }
+  }
+  
+  // Web Fallback: Simple obfuscation
+  return btoa(value);
+};
+
+const decryptValue = (value: string): string => {
+  if (!value) return '';
+
+  // MIGRATION CHECK: Legacy keys are plain text starting with AIza.
+  // We return them as-is so the user doesn't get logged out.
+  // They will be encrypted next time the user logs in/saves.
+  if (value.startsWith('AIza')) {
+    return value;
+  }
+  
+  if (ipcRenderer) {
+    try {
+      const decrypted = ipcRenderer.sendSync('decrypt-string', value);
+      if (decrypted) return decrypted;
+    } catch (e) {
+      console.error("Decryption IPC failed", e);
+    }
+  }
+
+  // Web Fallback / Last Resort
+  try {
+    return atob(value);
+  } catch {
+    return value; // Should theoretically not happen if flow is correct
+  }
+};
+
+// --------------------------
+
 export const authService = {
   
   getUserDataPath: (): string | null => {
@@ -40,7 +89,12 @@ export const authService = {
     return path.join(root, DATA_DIR_NAME, CONFIG_FILE);
   },
 
-  writeApiKeyToDisk: (apiKey: string) => {
+  /**
+   * Writes the API key to disk.
+   * NOTE: The apiKey passed here MUST be already encrypted if intended for secure storage.
+   * `setApiKey` handles the encryption flow before calling this.
+   */
+  writeApiKeyToDisk: (encryptedApiKey: string) => {
     const configPath = authService.getConfigFile();
     if (!configPath || !fs || !path) return;
 
@@ -53,7 +107,7 @@ export const authService = {
         config = JSON.parse(fs.readFileSync(configPath, 'utf-8'));
       }
       
-      config = { ...config, apiKey };
+      config = { ...config, apiKey: encryptedApiKey };
       fs.writeFileSync(configPath, JSON.stringify(config, null, 2), 'utf-8');
     } catch (error) {
       console.error("Failed to write config:", error);
@@ -86,11 +140,18 @@ export const authService = {
     }
   },
 
-  setApiKey: (apiKey: string, remember: boolean) => {
-    sessionStorage.setItem(API_KEY_STORAGE_KEY, apiKey);
+  setApiKey: (plainTextApiKey: string, remember: boolean) => {
+    // 1. Encrypt the key immediately using OS Keychain or fallback
+    const encryptedKey = encryptValue(plainTextApiKey);
+
+    // 2. Store encrypted version in session (runtime)
+    sessionStorage.setItem(API_KEY_STORAGE_KEY, encryptedKey);
+
     if (remember) {
-      localStorage.setItem(API_KEY_STORAGE_KEY, apiKey);
-      authService.writeApiKeyToDisk(apiKey);
+      // 3. Store encrypted version in local storage (persistence)
+      localStorage.setItem(API_KEY_STORAGE_KEY, encryptedKey);
+      // 4. Store encrypted version on disk (file system)
+      authService.writeApiKeyToDisk(encryptedKey);
     } else {
       localStorage.removeItem(API_KEY_STORAGE_KEY);
       authService.removeApiKeyFromDisk();
@@ -98,16 +159,21 @@ export const authService = {
   },
 
   getApiKey: (): string | null => {
-    const sessionKey = sessionStorage.getItem(API_KEY_STORAGE_KEY);
-    if (sessionKey) return sessionKey;
+    // 1. Retrieve the stored value (which is likely encrypted, or legacy plain text)
+    let storedValue = sessionStorage.getItem(API_KEY_STORAGE_KEY);
 
-    const localKey = localStorage.getItem(API_KEY_STORAGE_KEY);
-    if (localKey) return localKey;
+    if (!storedValue) {
+        storedValue = localStorage.getItem(API_KEY_STORAGE_KEY);
+    }
 
-    const diskKey = authService.readApiKeyFromDisk();
-    if (diskKey) return diskKey;
+    if (!storedValue) {
+        storedValue = authService.readApiKeyFromDisk();
+    }
 
-    return null;
+    if (!storedValue) return null;
+
+    // 2. Decrypt it to get the plain text key for the app to use
+    return decryptValue(storedValue);
   },
 
   clearApiKey: () => {

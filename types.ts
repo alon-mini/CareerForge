@@ -26,12 +26,20 @@ export interface EmailKit {
   followUpEmail: string;
 }
 
+export interface CompanyIntel {
+  keyValues: string[]; // 3 bullet points on values
+  recentInitiatives: string; // What are they building/doing now?
+  interviewTalkingPoints: string[]; // 3 things to mention to sound smart
+  cultureVibe: string; // "Fast paced", "Academic", etc.
+}
+
 export interface GeneratedAssets {
   resumeHtml: string;
   coverLetter?: string;
   strategyStory?: string;
   interviewPrep?: InterviewQuestion[];
   emailKit?: EmailKit;
+  companyIntel?: CompanyIntel;
 }
 
 export interface GenerationOptions {

@@ -2,7 +2,7 @@
 
 CareerForge is a professional-grade desktop command center designed to supercharge your job search. It uses advanced AI to transform your professional "Source of Truth" (a master profile) and a target Job Description into a perfectly tailored application kit.
 
-**Current Version:** 1.0.16
+**Current Version:** 1.0.17
 
 ![CareerForge](logoc.png)
 
@@ -11,7 +11,7 @@ CareerForge is a professional-grade desktop command center designed to superchar
 ### 🧠 Next-Gen AI Architecture
 *   **The Writer (`gemini-2.5-pro`)**: Handles heavy cognitive tasks like layout design, strategy narratives, and resume drafting with a massive thinking budget.
 *   **The Judge (`gemini-2.5-pro`)**: A specialized "Surgical Refinement" agent that audits the generated resume HTML to fix formatting, ensure strict one-page fit, and scrub artifacts.
-*   **The Assistant (`gemini-2.5-flash`)**: Powers fast tasks like job parsing and profile generation.
+*   **The Assistant (`gemini-2.5-flash`)**: Powers fast tasks like job parsing, company intel retrieval, and profile generation.
 
 ### ✨ Smart Automation
 *   **Master Profile Wizard**: Don't have a master resume? The built-in 5-step wizard interviews you and generates a perfectly structured Markdown profile to use as your "Source of Truth".
@@ -20,13 +20,14 @@ CareerForge is a professional-grade desktop command center designed to superchar
 
 ### 🎨 Visual & Functional Power
 *   **Modular Generation**: Choose exactly what you need. Only want a CV? Uncheck the rest. Need the full suite? Generate Cover Letter, Strategy, Interview Prep, and Outreach emails.
+*   **Company Recon Dossier**: Generates a dedicated intel cheat sheet with company values, recent initiatives, and insider talking points to help you ace the interview.
 *   **Resume Skins**: Instantly transform the look of your resume with professional themes (Modern Blue, Executive Serif, Tech Minimalist) without regenerating content.
 *   **WYSIWYG "Direct Edit"**: Toggle "Edit Mode" to click and type directly on the resume preview. No code required.
 *   **Native PDF Export**: Generate clean, print-ready PDFs for your Resume and Cover Letter.
 
 ### 🗂️ Application Tracker & History
 *   **Interactive Pipeline**: Manage your applications from "Applied" to "Offer". Visual timeline allows you to mark stages as current or add custom steps (e.g., "Home Assignment").
-*   **After-the-Fact Generation**: Did you only generate a Resume initially? Go to your History, open the application, and click "Generate Cover Letter" to create missing assets using the original context.
+*   **After-the-Fact Generation**: Did you only generate a Resume initially? Go to your History, open the application, and click "Generate Cover Letter" (or Intel, or Strategy) to create missing assets using the original context.
 *   **Persistent Data**: Your profile, API key, and application history are stored securely in your operating system's standard application data folder (`%APPDATA%`), ensuring they survive updates.
 
 ---
@@ -88,7 +89,7 @@ Your "Source of Truth" is a `.md` or `.txt` file containing your entire professi
 ### 5. Tracking & History
 1.  **Save**: Click **"Application Sent"** to save the kit to the `Applications` tab.
 2.  **History**: Navigate to the **"Applications"** tab to view your timeline.
-3.  **Generate Missing**: If you skipped the Cover Letter earlier, you can click the "Generate Cover Letter" button inside the history card to create it now.
+3.  **Generate Missing**: If you skipped the Cover Letter or Intel Dossier earlier, you can click the "Generate" button inside the history card to create it now.
 
 ---
 

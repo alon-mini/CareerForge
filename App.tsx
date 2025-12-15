@@ -14,7 +14,7 @@ import ProfileWizard from './components/ProfileWizard';
 import UsageModal from './components/UsageModal';
 
 // Hardcoded version to avoid module resolution issues with importing package.json in browser env
-const APP_VERSION = '1.0.16';
+const APP_VERSION = '1.0.17';
 
 function App() {
   const [apiKey, setApiKey] = useState<string | null>(null);
@@ -283,6 +283,7 @@ function App() {
           case 'strategyStory': return 'story';
           case 'interviewPrep': return 'interview';
           case 'emailKit': return 'outreach';
+          case 'companyIntel': return 'intel';
           default: return 'resume';
       }
   }
@@ -652,17 +653,30 @@ function App() {
                          <label htmlFor="jobTitle" className="block text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">
                              Target Role
                          </label>
-                         <button
-                             type="button"
-                             onClick={handleSmartPaste}
-                             className="text-xs flex items-center gap-1 text-brand-600 dark:text-brand-400 hover:underline font-semibold"
-                             title="Auto-fill Title, Company, and Description from your clipboard"
-                         >
-                             <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19.428 15.428a2 2 0 00-1.022-.547l-2.387-.477a6 6 0 00-3.86.517l-.318.158a6 6 0 01-3.86.517L6.05 15.21a2 2 0 00-1.806.547M8 4h8l-1 1v5.172a2 2 0 00.586 1.414l5 5c1.26 1.26.367 3.414-1.415 3.414H4.828c-1.782 0-2.674-2.154-1.414-3.414l5-5A2 2 0 009 10.172V5L8 4z" />
-                             </svg>
-                             Auto-Fill from Clipboard
-                         </button>
+                         {/* Tooltip Wrapper */}
+                         <div className="relative group flex items-center">
+                             <button
+                                 type="button"
+                                 onClick={handleSmartPaste}
+                                 className="text-xs flex items-center gap-1 text-brand-600 dark:text-brand-400 hover:underline font-semibold"
+                             >
+                                 <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19.428 15.428a2 2 0 00-1.022-.547l-2.387-.477a6 6 0 00-3.86.517l-.318.158a6 6 0 01-3.86.517L6.05 15.21a2 2 0 00-1.806.547M8 4h8l-1 1v5.172a2 2 0 00.586 1.414l5 5c1.26 1.26.367 3.414-1.415 3.414H4.828c-1.782 0-2.674-2.154-1.414-3.414l5-5A2 2 0 009 10.172V5L8 4z" />
+                                 </svg>
+                                 Auto-Fill from Clipboard
+                                 <svg className="w-3 h-3 ml-0.5 text-slate-400 hover:text-brand-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                                 </svg>
+                             </button>
+                             {/* Floating Tooltip */}
+                             <div className="absolute bottom-full right-0 mb-2 w-48 p-2.5 bg-slate-800 text-white text-[10px] rounded-lg shadow-xl opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-200 z-50 text-center leading-relaxed pointer-events-none transform translate-y-1 group-hover:translate-y-0">
+                                <span className="font-bold text-brand-300 block mb-1">How to use:</span>
+                                1. Open Job Page (LinkedIn)<br/>
+                                2. Press <strong className="text-white bg-slate-700 px-1 rounded">Ctrl + A</strong> (Select All)<br/>
+                                3. Copy & Click Here
+                                <div className="absolute top-full right-6 -mt-1 border-4 border-transparent border-t-slate-800"></div>
+                             </div>
+                         </div>
                     </div>
                     <div>
                       <input

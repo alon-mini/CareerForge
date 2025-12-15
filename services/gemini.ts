@@ -6,7 +6,7 @@ import { fileSystemService } from "./fileSystem";
 // We use Gemini 2.5 Pro for both roles as requested, leveraging its high reasoning capabilities and Thinking Config.
 const GENERATOR_MODEL = 'gemini-2.5-pro';
 const JUDGE_MODEL = 'gemini-2.5-pro';
-// Fast model for parsing and simple drafting
+// Fast model for parsing, simple drafting, and intel retrieval
 const FAST_MODEL = 'gemini-2.5-flash';
 
 // Pricing Estimates (USD per 1M tokens) - based on 1.5 Pro/Flash standard pricing as proxy
@@ -83,6 +83,18 @@ const outreachSchemaPart = {
     followUpEmail: { type: Type.STRING, description: "A professional post-interview thank you email." }
   },
   required: ["linkedInConnection", "followUpEmail"]
+};
+
+const intelSchemaPart = {
+    type: Type.OBJECT,
+    description: "Concise company intelligence dossier.",
+    properties: {
+        keyValues: { type: Type.ARRAY, items: { type: Type.STRING }, description: "3 core company values or mottoes." },
+        recentInitiatives: { type: Type.STRING, description: "One sentence on what they are currently building or focusing on." },
+        interviewTalkingPoints: { type: Type.ARRAY, items: { type: Type.STRING }, description: "3 specific, impressive things to mention to show you did research." },
+        cultureVibe: { type: Type.STRING, description: "A few words describing the work culture (e.g. 'Fast-paced, engineering-driven')." }
+    },
+    required: ["keyValues", "recentInitiatives", "interviewTalkingPoints", "cultureVibe"]
 };
 
 export const generateApplicationAssets = async (
@@ -241,7 +253,7 @@ export const generateApplicationAssets = async (
  * Generates a specific missing asset (e.g. Cover Letter) for an existing application.
  */
 export const generateSingleAsset = async (
-    assetType: 'coverLetter' | 'strategyStory' | 'interviewPrep' | 'emailKit',
+    assetType: 'coverLetter' | 'strategyStory' | 'interviewPrep' | 'emailKit' | 'companyIntel',
     profile: UserProfile,
     job: JobDetails,
     apiKey: string
@@ -253,7 +265,9 @@ export const generateSingleAsset = async (
     let instruction = "";
     
     // Single task thinking budget
-    const SINGLE_TASK_BUDGET = 2048;
+    let budget = 2048;
+    // We default to the Generator model, but for Intel we use Flash for speed.
+    let selectedModel = GENERATOR_MODEL;
 
     switch(assetType) {
         case 'coverLetter':
@@ -272,6 +286,12 @@ export const generateSingleAsset = async (
             schema = outreachSchemaPart;
             instruction = "Write a LinkedIn connection note (<300 chars) and a post-interview thank you email.";
             break;
+        case 'companyIntel':
+            selectedModel = FAST_MODEL; // Use Flash for speed
+            budget = 0; // Flash doesn't support thinking config usually, or we don't need it.
+            schema = intelSchemaPart;
+            instruction = "You are a corporate intelligence researcher. Provide a 'cheat sheet' for the candidate. Focus on specific, impressive, insider details. Avoid generic history.";
+            break;
     }
 
     const prompt = `
@@ -283,18 +303,24 @@ export const generateSingleAsset = async (
     `;
 
     try {
+        const config: any = {
+            responseMimeType: "application/json",
+            responseSchema: schema,
+            systemInstruction: instruction
+        };
+
+        // Only add thinking config if not Flash
+        if (selectedModel !== FAST_MODEL) {
+            config.thinkingConfig = { thinkingBudget: budget };
+        }
+
         const response = await ai.models.generateContent({
-            model: GENERATOR_MODEL,
+            model: selectedModel,
             contents: prompt,
-            config: {
-                responseMimeType: "application/json",
-                responseSchema: schema,
-                thinkingConfig: { thinkingBudget: SINGLE_TASK_BUDGET },
-                systemInstruction: instruction
-            }
+            config: config
         });
         
-        logUsage(GENERATOR_MODEL, response.usageMetadata, `Single Asset: ${assetType}`);
+        logUsage(selectedModel, response.usageMetadata, `Single Asset: ${assetType}`);
 
         // Safe JSON parsing with markdown cleanup
         let cleanedJson = response.text || "";

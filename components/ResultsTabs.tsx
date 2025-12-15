@@ -53,7 +53,7 @@ const THEMES: Record<string, { name: string; css: string }> = {
 };
 
 const ResultsTabs: React.FC<ResultsTabsProps> = ({ results, jobDetails, onUpdate, onGenerateMissing, requestedTab }) => {
-  const [activeTab, setActiveTab] = useState<'resume' | 'coverLetter' | 'story' | 'interview' | 'outreach'>('resume');
+  const [activeTab, setActiveTab] = useState<'resume' | 'coverLetter' | 'story' | 'interview' | 'outreach' | 'intel'>('resume');
   const [copyFeedback, setCopyFeedback] = useState<string | null>(null);
   const [isEditing, setIsEditing] = useState(false);
   const [selectedTheme, setSelectedTheme] = useState<string>('original');
@@ -216,13 +216,14 @@ const ResultsTabs: React.FC<ResultsTabsProps> = ({ results, jobDetails, onUpdate
     { id: 'coverLetter', label: 'Cover Letter' },
     { id: 'story', label: 'Strategy' },
     { id: 'interview', label: 'Interview Prep' },
-    { id: 'outreach', label: 'Outreach' }
+    { id: 'outreach', label: 'Outreach' },
+    { id: 'intel', label: 'Recon Dossier' } // New Tab
   ];
 
-  const MissingContentPlaceholder = ({ label, assetKey }: { label: string, assetKey: keyof GeneratedAssets }) => (
+  const MissingContentPlaceholder = ({ label, assetKey, message }: { label: string, assetKey: keyof GeneratedAssets, message?: string }) => (
       <div className="flex flex-col items-center justify-center h-96 border-2 border-dashed border-slate-200 dark:border-slate-800 rounded-xl bg-slate-50/50 dark:bg-slate-900/50">
           <p className="text-slate-500 dark:text-slate-400 mb-4 text-center max-w-sm">
-              You chose not to generate the <strong>{label}</strong> during the initial forge.
+              {message || `You chose not to generate the ${label} during the initial forge.`}
           </p>
           {onGenerateMissing ? (
               <button 
@@ -454,7 +455,60 @@ const ResultsTabs: React.FC<ResultsTabsProps> = ({ results, jobDetails, onUpdate
                     )}
                 </div>
             </div>
-        )
+        );
+      case 'intel':
+        if (!results.companyIntel) return <MissingContentPlaceholder label="Company Intel" assetKey="companyIntel" message="Generate a comprehensive intelligence dossier to prep for your interview." />;
+        return (
+            <div className="space-y-6">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    {/* Culture Vibe */}
+                    <div className="bg-slate-800 text-white rounded-xl p-6 shadow-lg relative overflow-hidden group">
+                         <div className="absolute top-0 right-0 p-4 opacity-10 group-hover:opacity-20 transition-opacity">
+                             <svg className="w-24 h-24" fill="currentColor" viewBox="0 0 20 20"><path d="M13 6a3 3 0 11-6 0 3 3 0 016 0zM18 8a2 2 0 11-4 0 2 2 0 014 0zM14 15a4 4 0 00-8 0v3h8v-3zM6 8a2 2 0 11-4 0 2 2 0 014 0zM16 18v-3a5.972 5.972 0 00-.75-2.906A3.005 3.005 0 0119 15v3h-3zM4.75 12.094A5.973 5.973 0 004 15v3H1v-3a3 3 0 013.75-2.906z"></path></svg>
+                         </div>
+                         <h3 className="text-xs font-bold uppercase tracking-widest text-emerald-400 mb-2">Culture Vibe</h3>
+                         <p className="text-lg font-medium leading-relaxed">{results.companyIntel.cultureVibe}</p>
+                    </div>
+                    
+                    {/* Recent Initiative */}
+                    <div className="bg-slate-800 text-white rounded-xl p-6 shadow-lg relative overflow-hidden group">
+                         <div className="absolute top-0 right-0 p-4 opacity-10 group-hover:opacity-20 transition-opacity">
+                             <svg className="w-24 h-24" fill="currentColor" viewBox="0 0 20 20"><path fillRule="evenodd" d="M11.3 1.046A1 1 0 0112 2v5h4a1 1 0 01.82 1.573l-7 10A1 1 0 018 18v-5H4a1 1 0 01-.82-1.573l7-10a1 1 0 011.12-.38z" clipRule="evenodd"></path></svg>
+                         </div>
+                         <h3 className="text-xs font-bold uppercase tracking-widest text-amber-400 mb-2">Latest Initiative</h3>
+                         <p className="text-lg font-medium leading-relaxed">{results.companyIntel.recentInitiatives}</p>
+                    </div>
+                </div>
+
+                {/* Key Values */}
+                <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-6">
+                    <h3 className="text-sm font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-4">Core Values / Motto</h3>
+                    <div className="flex flex-wrap gap-3">
+                        {results.companyIntel.keyValues.map((val, idx) => (
+                            <span key={idx} className="px-4 py-2 bg-slate-100 dark:bg-slate-800 text-slate-800 dark:text-slate-200 rounded-lg text-sm font-medium border border-slate-200 dark:border-slate-700">
+                                {val}
+                            </span>
+                        ))}
+                    </div>
+                </div>
+
+                {/* Interview Gold */}
+                <div className="bg-indigo-50 dark:bg-indigo-900/10 border border-indigo-100 dark:border-indigo-800 rounded-xl p-6">
+                    <h3 className="text-sm font-bold text-indigo-600 dark:text-indigo-400 uppercase tracking-wider mb-4 flex items-center gap-2">
+                        <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" /></svg>
+                        Insider Talking Points
+                    </h3>
+                    <ul className="space-y-3">
+                        {results.companyIntel.interviewTalkingPoints.map((point, idx) => (
+                            <li key={idx} className="flex gap-3 text-indigo-900 dark:text-indigo-200 text-sm">
+                                <span className="flex-shrink-0 w-1.5 h-1.5 rounded-full bg-indigo-500 mt-2"></span>
+                                {point}
+                            </li>
+                        ))}
+                    </ul>
+                </div>
+            </div>
+        );
     }
   };
 
@@ -468,7 +522,7 @@ const ResultsTabs: React.FC<ResultsTabsProps> = ({ results, jobDetails, onUpdate
       )}
 
       <div className="flex items-center justify-between mb-6">
-        <div className="bg-slate-100/80 dark:bg-slate-800/80 p-1 rounded-xl flex space-x-1 overflow-x-auto no-scrollbar border border-slate-200 dark:border-slate-700 flex-grow max-w-2xl">
+        <div className="bg-slate-100/80 dark:bg-slate-800/80 p-1 rounded-xl flex space-x-1 overflow-x-auto no-scrollbar border border-slate-200 dark:border-slate-700 flex-grow max-w-3xl">
             {tabs.map((tab) => (
                 <button
                     key={tab.id}
@@ -486,7 +540,7 @@ const ResultsTabs: React.FC<ResultsTabsProps> = ({ results, jobDetails, onUpdate
             ))}
         </div>
         
-        {onUpdate && (
+        {onUpdate && activeTab !== 'intel' && (
             <div className="ml-4 flex items-center">
                  <button
                     onClick={toggleEditMode}

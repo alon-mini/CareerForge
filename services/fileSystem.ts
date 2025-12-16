@@ -164,6 +164,33 @@ export const fileSystemService = {
   },
 
   /**
+   * Deletes an application from the history file.
+   */
+  deleteApplicationFromHistory: (id: string) => {
+    if (!fs || !path) return;
+
+    try {
+      const rootDir = getStoragePath();
+      if (!rootDir) return;
+
+      const filePath = path.join(rootDir, DATA_DIR_NAME, KITS_DIR_NAME, HISTORY_FILE_NAME);
+
+      if (!fs.existsSync(filePath)) return;
+
+      const fileContent = fs.readFileSync(filePath, 'utf-8');
+      let history: ApplicationRecord[] = JSON.parse(fileContent);
+
+      if (!Array.isArray(history)) return;
+
+      const newHistory = history.filter(r => r.id !== id);
+      fs.writeFileSync(filePath, JSON.stringify(newHistory, null, 2), 'utf-8');
+      console.log(`Deleted application ${id}`);
+    } catch (error) {
+      console.error("Failed to delete application:", error);
+    }
+  },
+
+  /**
    * Loads and parses the JSON history from user_data/Kits/applications.json
    */
   loadApplicationHistory: (): ApplicationRecord[] => {

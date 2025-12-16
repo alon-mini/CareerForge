@@ -8,15 +8,9 @@ interface ApplicationHistoryProps {
   onGenerateMissing: (recordId: string, assetType: keyof GeneratedAssets, recordContext: ApplicationRecord) => Promise<any>;
 }
 
-const STATUS_CONFIG: Record<ApplicationStatus, { label: string, color: string, bg: string, border: string }> = {
-  active: { label: 'In Progress', color: 'text-brand-600 dark:text-brand-400', bg: 'bg-brand-50 dark:bg-brand-900/20', border: 'border-brand-200 dark:border-brand-800' },
-  rejected: { label: 'Terminated', color: 'text-red-600 dark:text-red-400', bg: 'bg-red-50 dark:bg-red-900/20', border: 'border-red-200 dark:border-red-800' },
-  hired: { label: 'Offer / Hired', color: 'text-emerald-600 dark:text-emerald-400', bg: 'bg-emerald-50 dark:bg-emerald-900/20', border: 'border-emerald-200 dark:border-emerald-800' },
-  ghosted: { label: 'No Response', color: 'text-slate-500 dark:text-slate-400', bg: 'bg-slate-50 dark:bg-slate-800/50', border: 'border-slate-200 dark:border-slate-700' }
-};
-
 const ApplicationHistory: React.FC<ApplicationHistoryProps> = ({ onGenerateMissing }) => {
   const [history, setHistory] = useState<ApplicationRecord[]>([]);
+  const [sortType, setSortType] = useState<'time' | 'az' | 'progress'>('time');
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [newStageName, setNewStageName] = useState<string>('');
   const [addingStageTo, setAddingStageTo] = useState<string | null>(null);
@@ -85,6 +79,13 @@ const ApplicationHistory: React.FC<ApplicationHistoryProps> = ({ onGenerateMissi
      setAddingStageTo(null);
   }
 
+  const handleDelete = (id: string) => {
+      if (confirm("Are you sure you want to delete this application? This cannot be undone.")) {
+          fileSystemService.deleteApplicationFromHistory(id);
+          setHistory(prev => prev.filter(app => app.id !== id));
+      }
+  }
+
   // Map asset keys to ResultTabs keys
   const getTabIdFromAsset = (asset: keyof GeneratedAssets): string => {
       switch(asset) {
@@ -97,22 +98,16 @@ const ApplicationHistory: React.FC<ApplicationHistoryProps> = ({ onGenerateMissi
       }
   }
 
-  // Wraps the API generation call to update local history state immediately upon success
   const handleGenerateInHistory = async (record: ApplicationRecord, assetType: keyof GeneratedAssets) => {
       try {
           const result = await onGenerateMissing(record.id, assetType, record);
-          // Result comes back raw, but state is also updated in parent via filesystem.
-          // To make UI snappy, we update local state too.
           const updatedAssets = { ...record.assets, [assetType]: result };
           const updatedRecord = { ...record, assets: updatedAssets };
           updateRecord(updatedRecord);
-
-          // Force switch to the new tab for this record
           const tabId = getTabIdFromAsset(assetType);
           setTabOverrides(prev => ({ ...prev, [record.id]: tabId }));
-          
       } catch (e) {
-          // Error handling done in parent (App.tsx)
+          // Error handling done in parent
       }
   };
 
@@ -120,6 +115,62 @@ const ApplicationHistory: React.FC<ApplicationHistoryProps> = ({ onGenerateMissi
       const updatedRecord = { ...record, assets: newAssets };
       updateRecord(updatedRecord);
   };
+
+  const getSortedHistory = () => {
+    const sorted = [...history];
+    switch (sortType) {
+        case 'az':
+            return sorted.sort((a, b) => a.company.localeCompare(b.company));
+        case 'progress':
+            // Prioritize Active/Hired first, then by depth of stage
+            return sorted.sort((a, b) => {
+                 const getScore = (r: ApplicationRecord) => {
+                    if (r.overallStatus === 'rejected') return -1;
+                    if (r.overallStatus === 'ghosted') return 0;
+                    // Active or Hired
+                    const idx = r.stages.findIndex(s => s.current);
+                    return (idx === -1 ? 0 : idx) + 1; // +1 to stay above 0
+                 };
+                 // Higher score first
+                 return getScore(b) - getScore(a);
+            });
+        case 'time':
+        default:
+             return sorted.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+    }
+  };
+
+  const getStatusBadge = (app: ApplicationRecord) => {
+    const currentStageIndex = app.stages.findIndex(s => s.current);
+    const currentStageLabel = app.stages[currentStageIndex]?.label || "Unknown";
+    
+    let label = currentStageLabel;
+    let style = "bg-slate-100 text-slate-600 border-slate-200 dark:bg-slate-800 dark:text-slate-400 dark:border-slate-700";
+
+    if (app.overallStatus === 'rejected') {
+        label = "Rejected";
+        style = "bg-red-50 text-red-600 border-red-200 dark:bg-red-900/20 dark:text-red-400 dark:border-red-800";
+    } else if (app.overallStatus === 'hired') {
+        label = "Hired";
+        style = "bg-emerald-50 text-emerald-600 border-emerald-200 dark:bg-emerald-900/20 dark:text-emerald-400 dark:border-emerald-800";
+    } else if (app.overallStatus === 'ghosted') {
+        label = "No Response";
+        style = "bg-slate-100 text-slate-500 border-slate-200 dark:bg-slate-800 dark:text-slate-400 dark:border-slate-700";
+    } else {
+        // Active Status
+        if (currentStageIndex === 0) {
+             label = "Applied";
+             style = "bg-blue-50 text-blue-600 border-blue-200 dark:bg-blue-900/20 dark:text-blue-400 dark:border-blue-800";
+        } else {
+             label = currentStageLabel;
+             style = "bg-emerald-50 text-emerald-600 border-emerald-200 dark:bg-emerald-900/20 dark:text-emerald-400 dark:border-emerald-800";
+        }
+    }
+
+    return { label, style };
+  };
+
+  const sortedHistory = getSortedHistory();
 
   if (history.length === 0) {
     return (
@@ -137,17 +188,30 @@ const ApplicationHistory: React.FC<ApplicationHistoryProps> = ({ onGenerateMissi
 
   return (
     <div className="space-y-6 animate-fade-in pb-20">
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
           <div className="flex items-center gap-4">
             <h2 className="text-2xl font-bold text-slate-900 dark:text-white">Application Tracker</h2>
             <span className="text-sm text-slate-500 dark:text-slate-400 bg-slate-100 dark:bg-slate-800 px-3 py-1 rounded-full">
                 {history.length} Applications
             </span>
           </div>
+          
+          <div className="flex items-center gap-2">
+            <label className="text-sm font-medium text-slate-500 dark:text-slate-400">Sort by:</label>
+            <select 
+                value={sortType} 
+                onChange={(e) => setSortType(e.target.value as any)}
+                className="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 text-sm rounded-lg p-2 outline-none focus:ring-2 focus:ring-brand-500 transition-shadow shadow-sm"
+            >
+                <option value="time">Time (Default)</option>
+                <option value="az">A-Z (Company)</option>
+                <option value="progress">Progress</option>
+            </select>
+          </div>
       </div>
       
-      {history.map((app) => {
-        const statusConfig = STATUS_CONFIG[app.overallStatus] || STATUS_CONFIG.active;
+      {sortedHistory.map((app) => {
+        const badge = getStatusBadge(app);
         
         return (
           <div 
@@ -177,8 +241,8 @@ const ApplicationHistory: React.FC<ApplicationHistoryProps> = ({ onGenerateMissi
                     {app.title} <span className="text-slate-400 font-normal text-base">at</span> {app.company}
                   </h3>
                   <div className="flex items-center gap-3 mt-1">
-                      <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium ${statusConfig.bg} ${statusConfig.color} border ${statusConfig.border}`}>
-                          {statusConfig.label}
+                      <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium border ${badge.style}`}>
+                          {badge.label}
                       </span>
                       <span className="text-xs text-slate-400 dark:text-slate-500">
                         Applied {new Date(app.date).toLocaleDateString()}
@@ -218,7 +282,7 @@ const ApplicationHistory: React.FC<ApplicationHistoryProps> = ({ onGenerateMissi
                                     className={`flex items-center px-3 py-2 text-sm font-medium rounded-lg transition-colors border ${app.overallStatus === 'ghosted' ? 'bg-slate-100 border-slate-300 text-slate-700 dark:bg-slate-800 dark:border-slate-600 dark:text-slate-300' : 'bg-white border-slate-200 text-slate-600 hover:bg-slate-50 dark:bg-slate-900 dark:border-slate-700 dark:text-slate-400'}`}
                                 >
                                     <div className={`w-2 h-2 rounded-full mr-2 ${app.overallStatus === 'ghosted' ? 'bg-slate-500' : 'bg-slate-300'}`}></div>
-                                    No Response / Ghosted
+                                    No Response
                                 </button>
                                 <button 
                                     onClick={() => setOverallStatus(app, 'hired')}
@@ -232,9 +296,22 @@ const ApplicationHistory: React.FC<ApplicationHistoryProps> = ({ onGenerateMissi
                                     className={`flex items-center px-3 py-2 text-sm font-medium rounded-lg transition-colors border ${app.overallStatus === 'rejected' ? 'bg-red-50 border-red-200 text-red-700 dark:bg-red-900/20 dark:border-red-800 dark:text-red-400' : 'bg-white border-slate-200 text-slate-600 hover:bg-slate-50 dark:bg-slate-900 dark:border-slate-700 dark:text-slate-400'}`}
                                 >
                                     <div className={`w-2 h-2 rounded-full mr-2 ${app.overallStatus === 'rejected' ? 'bg-red-500' : 'bg-slate-300'}`}></div>
-                                    Terminated / Rejected
+                                    Rejected
                                 </button>
                             </div>
+
+                            {/* DELETE BUTTON - Only visible when rejected */}
+                            {app.overallStatus === 'rejected' && (
+                                <button 
+                                    onClick={() => handleDelete(app.id)}
+                                    className="mt-4 w-full flex items-center justify-center gap-2 px-3 py-2 text-sm font-medium text-red-600 bg-white border border-red-200 rounded-lg hover:bg-red-50 dark:bg-slate-900 dark:text-red-400 dark:border-red-900 dark:hover:bg-red-900/30 transition-all shadow-sm"
+                                >
+                                    <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                                    </svg>
+                                    Delete Application
+                                </button>
+                            )}
                         </div>
 
                         {/* Interactive Timeline */}

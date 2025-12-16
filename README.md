@@ -3,7 +3,7 @@
 
 CareerForge is a professional-grade desktop command center designed to supercharge your job search. It uses advanced AI to transform your professional "Source of Truth" (a master profile) and a target Job Description into a perfectly tailored application kit.
 
-**Current Version:** 1.0.18
+**Current Version:** 1.0.19
 
 ![CareerForge](logoc.png)
 
